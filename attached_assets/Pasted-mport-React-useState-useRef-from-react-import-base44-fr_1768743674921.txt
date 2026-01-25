@@ -1,0 +1,234 @@
+mport React, { useState, useRef } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Search,
+  CreditCard,
+  RefreshCw,
+  Download,
+  User,
+  MapPin,
+  Phone
+} from 'lucide-react';
+import html2canvas from 'html2canvas';
+
+export default function IDCardGenerator() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedBeneficiary, setSelectedBeneficiary] = useState(null);
+  const cardRef = useRef(null);
+
+  const { data: submissions = [], isLoading } = useQuery({
+    queryKey: ['allSubmissions'],
+    queryFn: () => base44.entities.LivestockSubmission.list('-created_date'),
+  });
+
+  const filteredSubmissions = submissions.filter(sub => {
+    if (!searchTerm) return false;
+    return (
+      sub.registration_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sub.farmer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sub.contact_number?.includes(searchTerm)
+    );
+  });
+
+  const handleGenerateCard = async () => {
+    if (!cardRef.current) return;
+    
+    const canvas = await html2canvas(cardRef.current, {
+      scale: 2,
+      backgroundColor: '#ffffff'
+    });
+    
+    const link = document.createElement('a');
+    link.download = `ID_Card_${selectedBeneficiary.registration_id}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
+  };
+
+  const handlePrintCard = async () => {
+    if (!cardRef.current) return;
+    
+    const canvas = await html2canvas(cardRef.current, {
+      scale: 2,
+      backgroundColor: '#ffffff'
+    });
+    
+    const imgData = canvas.toDataURL('image/png');
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>ID Card - ${selectedBeneficiary.registration_id}</title>
+        <style>
+          body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+          img { max-width: 100%; height: auto; }
+        </style>
+      </head>
+      <body>
+        <img src="${imgData}" />
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">ID Card Generator</h1>
+        <p className="text-slate-500 mt-1">Generate and print beneficiary ID cards</p>
+      </div>
+
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>Search Beneficiary</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              placeholder="Search by Registration ID, Name, or Phone"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {searchTerm && (
+            <div className="mt-4 max-h-64 overflow-y-auto">
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <RefreshCw className="w-8 h-8 animate-spin text-slate-400 mx-auto" />
+                </div>
+              ) : filteredSubmissions.length === 0 ? (
+                <p className="text-slate-500 text-center py-4">No beneficiaries found</p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredSubmissions.slice(0, 10).map((sub) => (
+                    <Card
+                      key={sub.id}
+                      className={`cursor-pointer hover:bg-slate-50 transition-colors ${
+                        selectedBeneficiary?.id === sub.id ? 'border-emerald-500 bg-emerald-50' : ''
+                      }`}
+                      onClick={() => setSelectedBeneficiary(sub)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{sub.farmer_name}</p>
+                            <p className="text-sm text-slate-500 font-mono">{sub.registration_id}</p>
+                          </div>
+                          <Badge variant="outline">{sub.lga}</Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {selectedBeneficiary && (
+        <>
+          <Card>
+            <CardHeader className="border-b flex flex-row items-center justify-between">
+              <CardTitle>ID Card Preview</CardTitle>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleGenerateCard}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Download
+                </Button>
+                <Button onClick={handlePrintCard} className="bg-emerald-600 hover:bg-emerald-700">
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Print
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-8 flex justify-center">
+              <div 
+                ref={cardRef}
+                className="w-[400px] h-[250px] bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl shadow-2xl p-6 text-white relative overflow-hidden"
+              >
+                {/* Background Pattern */}
+                <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-20 -mt-20" />
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full -ml-16 -mb-16" />
+                
+                {/* Header */}
+                <div className="relative z-10 flex flex-col h-full">
+                  <div className="border-b border-white/30 pb-3 mb-4">
+                    <p className="text-xs font-medium opacity-90">Jigawa State</p>
+                    <p className="text-sm font-bold">Ministry of Livestock Development</p>
+                  </div>
+
+                  <div className="flex gap-4 flex-1">
+                    {/* Photo Section */}
+                    <div className="w-20 h-20 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      {selectedBeneficiary.user_photograph ? (
+                        <img 
+                          src={selectedBeneficiary.user_photograph} 
+                          alt="Beneficiary" 
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                      ) : (
+                        <User className="w-10 h-10" />
+                      )}
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <p className="text-xs opacity-75">Name</p>
+                        <p className="font-bold text-sm">{selectedBeneficiary.farmer_name}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs opacity-75">Reg ID</p>
+                        <p className="font-mono font-bold text-xs">{selectedBeneficiary.registration_id}</p>
+                      </div>
+                      <div className="flex gap-4 text-xs">
+                        <div>
+                          <p className="opacity-75 flex items-center gap-1">
+                            <Phone className="w-3 h-3" />
+                            Phone
+                          </p>
+                          <p className="font-medium">{selectedBeneficiary.contact_number || 'N/A'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="pt-3 border-t border-white/30">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        <span>{selectedBeneficiary.ward}, {selectedBeneficiary.lga}</span>
+                      </div>
+                      <span className="opacity-75">Valid ID</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {!selectedBeneficiary && (
+        <Card className="border-dashed">
+          <CardContent className="p-12 text-center">
+            <CreditCard className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500">Search and select a beneficiary to generate their ID card</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
