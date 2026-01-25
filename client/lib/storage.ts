@@ -211,6 +211,14 @@ export const storage = {
     }
   },
 
+  async clearPendingSubmissions(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_SUBMISSIONS);
+    } catch (error) {
+      console.error("Error clearing pending submissions:", error);
+    }
+  },
+
   // SYNCED SUBMISSIONS
   async getSyncedSubmissions(): Promise<EnhancedLivestockSubmission[]> {
     try {
@@ -629,7 +637,7 @@ export const storage = {
         }
       }
       
-      return JSON.stringify(liquefiedData, null, 2);
+      return JSON.stringify(livestockData, null, 2);
     } catch (error) {
       console.error("Error exporting data:", error);
       return "{}";

@@ -24,6 +24,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { storage } from "@/lib/storage";
+import { syncService } from "@/lib/sync-service";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import type { LivestockSubmission } from "@/types";
 
@@ -74,21 +75,19 @@ export default function AgentDashboardScreen() {
 
     setIsSyncing(true);
     try {
-      const allSubmissions = await storage.getSubmissions();
-      const updatedSubmissions = allSubmissions.map((s) => {
-        const isPending = pendingSubmissions.some((p) => p.id === s.id);
-        return isPending ? { ...s, submission_status: "synced" as const } : s;
-      });
-
-      await storage.setSubmissions(updatedSubmissions);
-      await storage.clearPendingSubmissions();
-      await storage.setLastSync(new Date().toISOString());
-
-      setPendingSubmissions([]);
-      setLastSync(new Date().toISOString());
-      setSubmissions(updatedSubmissions.filter((s) => s.created_by === user?.email));
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const result = await syncService.syncPendingSubmissions();
+      
+      if (result.success) {
+        await loadData();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else if (result.synced > 0) {
+        await loadData();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        console.warn(`Synced ${result.synced}, failed ${result.failed}`);
+      } else {
+        console.error("Sync failed:", result.errors);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
     } catch (error) {
       console.error("Sync failed:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
