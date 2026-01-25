@@ -157,7 +157,6 @@ export default function SubmissionFormScreen() {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -195,7 +194,6 @@ export default function SubmissionFormScreen() {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -314,7 +312,7 @@ export default function SubmissionFormScreen() {
         membership_status: formData.membership_status || null,
         executive_position: formData.executive_position || null,
         geo_location: geoLocation || null,
-        farmer_image: farmerImage ? `data:image/jpeg;base64,${farmerImage}` : null,
+        farmer_image: farmerImage || null,
         has_disease: formData.has_disease || null,
         disease_name: formData.disease_name || null,
         disease_description: formData.disease_description || null,

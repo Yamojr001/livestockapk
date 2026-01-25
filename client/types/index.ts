@@ -208,7 +208,7 @@ export interface LivestockSubmission {
   challenges?: string[];
   
   // Images
-  farmer_image?: string; // Base64 or URL
+  farmer_image?: string; // Image URI or URL
   farm_image?: string;
   livestock_image?: string[];
   document_images?: string[]; // ID cards, etc.

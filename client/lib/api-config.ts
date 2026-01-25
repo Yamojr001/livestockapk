@@ -62,7 +62,7 @@ export async function apiRequest(
 
     console.log(`API Request: ${method} ${url}`, {
       headers,
-      body: body ? (body.farmer_name ? { ...body, farmer_image: body.farmer_image ? '[BASE64_IMAGE]' : null } : body) : null,
+      body: body ? (body.farmer_name ? { ...body, farmer_image: body.farmer_image ? '[IMAGE_URI]' : null } : body) : null,
     });
 
     const response = await fetch(url, {
