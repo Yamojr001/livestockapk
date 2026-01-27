@@ -6,6 +6,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import AgentDashboardScreen from "@/screens/AgentDashboardScreen";
 import SubmissionFormScreen from "@/screens/SubmissionFormScreen";
 import MySubmissionsScreen from "@/screens/MySubmissionsScreen";
+import AgentIDCardScreen from "@/screens/AgentIDCardScreen";
 import ProfileStackNavigator from "@/navigation/ProfileStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 import { HeaderTitle } from "@/components/HeaderTitle";
@@ -14,6 +15,7 @@ export type AgentTabParamList = {
   HomeTab: undefined;
   SubmissionsTab: undefined;
   SubmitTab: undefined;
+  IDCardTab: undefined;
   ProfileTab: undefined;
 };
 
@@ -98,6 +100,17 @@ export default function AgentTabNavigator() {
                 color={focused ? "#fff" : theme.primary}
               />
             </View>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="IDCardTab"
+        component={AgentIDCardScreen}
+        options={{
+          title: "ID Card",
+          headerTitle: "Farmer ID Cards",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="credit-card" size={size} color={color} />
           ),
         }}
       />
