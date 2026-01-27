@@ -27,7 +27,6 @@ import { useNetwork } from "@/contexts/NetworkContext";
 import { storage } from "@/lib/storage";
 import { apiRequest } from "@/lib/api-config";
 import { getLGAs, getWards, ASSOCIATIONS, BANKS } from "@/data/lgaWardData";
-import { generateAndShareFarmerIDCard } from "@/lib/id-card-generator";
 import { generateFarmerId } from "@/lib/farmer-id-generator";
 import { BorderRadius, Spacing } from "@/constants/theme";
 
@@ -349,18 +348,6 @@ export default function SubmissionFormScreen() {
           console.log('Saved to local storage as synced');
           
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          
-          // Generate ID card with server registration ID
-          await generateAndShareFarmerIDCard({
-            farmerName: formData.farmer_name.trim(),
-            registrationId: serverData.registration_id || registrationId,
-            farmerId: farmerId,
-            contactNumber: formData.contact_number.trim(),
-            lga: formData.lga,
-            ward: formData.ward,
-            association: formData.association,
-            numberOfAnimals: parseInt(formData.number_of_animals),
-          });
 
           // Reset form
           setFormData({
@@ -452,18 +439,6 @@ export default function SubmissionFormScreen() {
         console.log('Saved to local storage as pending');
         
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        // Generate ID card with local registration ID
-        await generateAndShareFarmerIDCard({
-          farmerName: formData.farmer_name.trim(),
-          registrationId: registrationId,
-          farmerId: farmerId,
-          contactNumber: formData.contact_number.trim(),
-          lga: formData.lga,
-          ward: formData.ward,
-          association: formData.association,
-          numberOfAnimals: parseInt(formData.number_of_animals),
-        });
 
         // Reset form
         setFormData({
