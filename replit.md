@@ -49,6 +49,12 @@ The Laravel backend is designed to be deployed on Hostinger separately. See `liv
 - GPS location tracking
 - Livestock health tracking
 - Data synchronization
+- Farmer ID card generation (separate screen for agents)
+
+## Recent Changes
+- Removed automatic ID card generation from submission flow
+- Added dedicated "ID Card" tab for agents to generate farmer ID cards on demand
+- Changed image handling to use URIs instead of base64 encoding for better performance
 
 ## User Preferences
 - Preferred communication style: Simple, everyday language
