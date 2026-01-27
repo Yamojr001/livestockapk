@@ -260,21 +260,6 @@ export default function IDCardScreen() {
     </Pressable>
   );
 
-  // Format address from village/town and LGA
-  const formatAddress = (submission: LivestockSubmission) => {
-    const village = submission.village || submission.ward || "";
-    const lga = submission.lga || "";
-
-    if (village && lga) {
-      return `${village}, ${lga}`;
-    } else if (village) {
-      return village;
-    } else if (lga) {
-      return lga;
-    }
-    return "";
-  };
-
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
@@ -411,15 +396,11 @@ export default function IDCardScreen() {
                   </ThemedText>
                 </View>
 
-                {/* Address */}
-                {formatAddress(selectedSubmission) ? (
-                  <View style={styles.fieldRow}>
-                    <ThemedText style={styles.fieldLabel}>Address:</ThemedText>
-                    <ThemedText style={[styles.fieldValue, styles.addressText]}>
-                      {formatAddress(selectedSubmission)}
-                    </ThemedText>
-                  </View>
-                ) : null}
+                {/* Designation */}
+                <View style={styles.fieldRow}>
+                  <ThemedText style={styles.fieldLabel}>Designation:</ThemedText>
+                  <ThemedText style={styles.fieldValue}>Farmer</ThemedText>
+                </View>
               </View>
             </View>
 
@@ -715,12 +696,6 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: "Courier", android: "monospace" }),
     fontSize: 13,
   },
-  addressText: {
-    fontSize: 12,
-    fontStyle: "italic",
-    color: "#E8F5E9",
-  },
-
   validRow: {
     marginTop: 5,
   },
