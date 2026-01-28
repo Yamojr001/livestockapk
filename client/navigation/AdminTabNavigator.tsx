@@ -7,6 +7,7 @@ import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
 import DataManagementScreen from "@/screens/DataManagementScreen";
 import UserManagementScreen from "@/screens/UserManagementScreen";
 import IDCardScreen from "@/screens/IDCardScreen";
+import VerifyIDScreen from "@/screens/VerifyIDScreen";
 import ProfileStackNavigator from "@/navigation/ProfileStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 import { HeaderTitle } from "@/components/HeaderTitle";
@@ -15,6 +16,7 @@ export type AdminTabParamList = {
   HomeTab: undefined;
   DataTab: undefined;
   IDCardTab: undefined;
+  VerifyTab: undefined;
   UsersTab: undefined;
   ProfileTab: undefined;
 };
@@ -84,6 +86,17 @@ export default function AdminTabNavigator() {
           headerTitle: "ID Card Generator",
           tabBarIcon: ({ color, size }) => (
             <Feather name="credit-card" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="VerifyTab"
+        component={VerifyIDScreen}
+        options={{
+          title: "Verify",
+          headerTitle: "Verify Farmer ID",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="shield" size={size} color={color} />
           ),
         }}
       />

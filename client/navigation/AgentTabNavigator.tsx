@@ -7,6 +7,7 @@ import AgentDashboardScreen from "@/screens/AgentDashboardScreen";
 import SubmissionFormScreen from "@/screens/SubmissionFormScreen";
 import MySubmissionsScreen from "@/screens/MySubmissionsScreen";
 import AgentIDCardScreen from "@/screens/AgentIDCardScreen";
+import VerifyIDScreen from "@/screens/VerifyIDScreen";
 import ProfileStackNavigator from "@/navigation/ProfileStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 import { HeaderTitle } from "@/components/HeaderTitle";
@@ -16,6 +17,7 @@ export type AgentTabParamList = {
   SubmissionsTab: undefined;
   SubmitTab: undefined;
   IDCardTab: undefined;
+  VerifyTab: undefined;
   ProfileTab: undefined;
 };
 
@@ -111,6 +113,17 @@ export default function AgentTabNavigator() {
           headerTitle: "Farmer ID Cards",
           tabBarIcon: ({ color, size }) => (
             <Feather name="credit-card" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="VerifyTab"
+        component={VerifyIDScreen}
+        options={{
+          title: "Verify",
+          headerTitle: "Verify Farmer ID",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="shield" size={size} color={color} />
           ),
         }}
       />

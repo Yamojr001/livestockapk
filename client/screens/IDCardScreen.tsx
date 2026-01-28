@@ -19,18 +19,20 @@ import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
 import * as Haptics from "expo-haptics";
+import QRCode from "react-native-qrcode-svg";
 import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
 import { useTheme } from "@/hooks/useTheme";
 import { storage } from "@/lib/storage";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import {
   formatPhoneNumber,
-  formatDate,
   printCapturedIDCard,
   generatePDFFromImage,
 } from "@/lib/id-card-generator";
 import type { LivestockSubmission, User } from "@/types";
+
+const CARD_WIDTH = Math.min(Dimensions.get("window").width - 40, 400);
+const CARD_HEIGHT = 240;
 
 export default function IDCardScreen() {
   const headerHeight = useHeaderHeight();
@@ -38,7 +40,6 @@ export default function IDCardScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const cardRef = useRef<View>(null);
-  const { width: screenWidth } = Dimensions.get("window");
 
   const [submissions, setSubmissions] = useState<LivestockSubmission[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -65,7 +66,6 @@ export default function IDCardScreen() {
     setIsLoading(false);
   };
 
-  // Combine submissions + users (mapped) into a single searchable pool.
   const combinedSearchPool: LivestockSubmission[] = [
     ...submissions,
     ...users.map((u) => ({
@@ -94,7 +94,9 @@ export default function IDCardScreen() {
       livestock_type: "",
       registration_date: u.created_date,
       valid_until: "2025-12-31",
-    } as LivestockSubmission)),
+      _isUser: true,
+      _userRole: u.user_role,
+    } as LivestockSubmission & { _isUser?: boolean; _userRole?: string })),
   ];
 
   const filteredSubmissions = searchTerm
@@ -124,7 +126,6 @@ export default function IDCardScreen() {
         return;
       }
 
-      // capture as tmp file so file:// uri can be saved
       const uri = await captureRef(cardRef, {
         format: "png",
         quality: 1,
@@ -132,6 +133,7 @@ export default function IDCardScreen() {
       });
 
       await MediaLibrary.saveToLibraryAsync(uri);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Success", "ID Card saved to gallery!");
     } catch (error) {
       console.error("Error saving card:", error);
@@ -178,7 +180,6 @@ export default function IDCardScreen() {
       setIsSaving(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Capture card to image first, then create PDF from that image
       const imageUri = await captureRef(cardRef, {
         format: "png",
         quality: 1,
@@ -191,13 +192,13 @@ export default function IDCardScreen() {
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(pdfUri, {
             mimeType: "application/pdf",
-            dialogTitle: `${selectedSubmission.farmer_name} - Farmer ID Card`,
+            dialogTitle: `${selectedSubmission.farmer_name} - ID Card`,
             UTI: "com.adobe.pdf",
           });
         } else {
           Alert.alert(
             "Success",
-            "Farmer ID Card PDF generated! Sharing is not available on this device."
+            "ID Card PDF generated! Sharing is not available on this device."
           );
         }
       } else {
@@ -260,6 +261,26 @@ export default function IDCardScreen() {
     </Pressable>
   );
 
+  const getQRValue = () => {
+    const regId = selectedSubmission?.registration_id || selectedSubmission?.farmer_id || "";
+    return `https://livestock.jigawa.gov.ng/verify/${regId}`;
+  };
+
+  const getLocation = () => {
+    const ward = selectedSubmission?.ward || "";
+    const lga = selectedSubmission?.lga || "";
+    if (ward && lga) return `${ward}, ${lga}`;
+    return ward || lga || "N/A";
+  };
+
+  const getDesignation = () => {
+    const sub = selectedSubmission as any;
+    if (sub?._isUser) {
+      return sub._userRole === "admin" ? "Administrator" : "Field Agent";
+    }
+    return "Farmer";
+  };
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
@@ -273,7 +294,7 @@ export default function IDCardScreen() {
     >
       <ThemedText style={styles.title}>ID Card Generator</ThemedText>
       <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Search and generate farmer ID cards
+        Search and generate ID cards for farmers and staff
       </ThemedText>
 
       <View
@@ -303,7 +324,7 @@ export default function IDCardScreen() {
             <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
           ) : filteredSubmissions.length === 0 ? (
             <ThemedText style={[styles.noResults, { color: theme.textSecondary }]}>
-              No farmers found
+              No results found
             </ThemedText>
           ) : (
             filteredSubmissions.slice(0, 10).map((item) => (
@@ -315,106 +336,81 @@ export default function IDCardScreen() {
 
       {selectedSubmission ? (
         <View style={styles.cardSection}>
-          <ThemedText style={styles.sectionTitle}>Farmer ID Card</ThemedText>
+          <ThemedText style={styles.sectionTitle}>{getDesignation()} ID Card</ThemedText>
 
           <View
             ref={cardRef}
             collapsable={false}
-            style={[
-              styles.idCard,
-              {
-                backgroundColor: "#057856",
-              },
-            ]}
+            style={styles.idCard}
           >
-            {/* Quarter Circle Decoration at top-right corner */}
-            <View style={styles.quarterCircle} />
-
-            {/* Header - Jigawa State Ministry */}
             <View style={styles.cardHeader}>
-              <ThemedText style={[styles.cardHeaderMain, { color: "#FFFFFF" }]}>
-                Jigawa State
-              </ThemedText>
-              <ThemedText style={[styles.cardHeaderSub, { color: "#E8F5E9" }]}>
+              <ThemedText style={styles.headerTitle}>Jigawa State</ThemedText>
+              <ThemedText style={styles.headerSubtitle}>
                 Ministry of Livestock Development
               </ThemedText>
             </View>
 
-            {/* Body Content */}
             <View style={styles.cardBody}>
-              {/* Left: Rectangular Image Section */}
-              <View style={styles.imageSection}>
+              <View style={styles.photoSection}>
                 {selectedSubmission.farmer_image ? (
                   <Image
                     source={{ uri: selectedSubmission.farmer_image }}
-                    style={styles.farmerImage}
+                    style={styles.farmerPhoto}
                     resizeMode="cover"
                   />
                 ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <Feather name="user" size={40} color="#FFFFFF" />
-                    <ThemedText style={[styles.placeholderText, { color: "#E8F5E9" }]}>
-                      Farmer Photo
-                    </ThemedText>
+                  <View style={styles.photoPlaceholder}>
+                    <Feather name="user" size={36} color="#057856" />
                   </View>
                 )}
               </View>
 
-              {/* Right: Details Section (label/value rows with fixed label width) */}
-              <View style={styles.detailsSection}>
-                {/* Name */}
-                <View style={styles.fieldRow}>
-                  <ThemedText style={styles.fieldLabel}>Name:</ThemedText>
-                  <ThemedText style={styles.fieldValue}>
+              <View style={styles.infoSection}>
+                <View style={styles.infoRow}>
+                  <ThemedText style={styles.infoLabel}>Name</ThemedText>
+                  <ThemedText style={styles.infoValue}>
                     {selectedSubmission.farmer_name || "N/A"}
                   </ThemedText>
                 </View>
 
-                {/* Reg ID */}
-                <View style={styles.fieldRow}>
-                  <ThemedText style={styles.fieldLabel}>Reg ID:</ThemedText>
-                  <ThemedText style={[styles.fieldValue, styles.monospace]}>
+                <View style={styles.infoRow}>
+                  <ThemedText style={styles.infoLabel}>Reg ID</ThemedText>
+                  <ThemedText style={[styles.infoValue, styles.regIdText]}>
                     {selectedSubmission.registration_id ||
                       selectedSubmission.farmer_id ||
                       "N/A"}
                   </ThemedText>
                 </View>
 
-                {/* Phone */}
-                <View style={styles.fieldRow}>
-                  <ThemedText style={styles.fieldLabel}>Phone:</ThemedText>
-                  <ThemedText style={styles.fieldValue}>
+                <View style={styles.infoRow}>
+                  <View style={styles.phoneRow}>
+                    <Feather name="phone" size={12} color="#057856" />
+                    <ThemedText style={styles.phoneLabel}>Phone</ThemedText>
+                  </View>
+                  <ThemedText style={styles.infoValue}>
                     {formatPhoneNumber(selectedSubmission.contact_number) || "N/A"}
                   </ThemedText>
                 </View>
+              </View>
 
-                {/* LGA */}
-                <View style={styles.fieldRow}>
-                  <ThemedText style={styles.fieldLabel}>LGA:</ThemedText>
-                  <ThemedText style={styles.fieldValue}>
-                    {selectedSubmission.lga || "N/A"}
-                  </ThemedText>
-                </View>
-
-                {/* Designation */}
-                <View style={styles.fieldRow}>
-                  <ThemedText style={styles.fieldLabel}>Designation:</ThemedText>
-                  <ThemedText style={styles.fieldValue}>Farmer</ThemedText>
-                </View>
+              <View style={styles.qrSection}>
+                <QRCode
+                  value={getQRValue()}
+                  size={70}
+                  backgroundColor="white"
+                  color="#000"
+                />
               </View>
             </View>
 
-            {/* Footer (left: official text, right: validity) */}
-            <View style={styles.cardFooterRow}>
-              <ThemedText style={[styles.footerTextLeft, { color: "#E8F5E9" }]}>
-                Official Livestock Farmer ID Card
-              </ThemedText>
-              <View style={styles.footerValidRight}>
-                <Feather name="check-circle" size={14} color="#4CAF50" />
-                <ThemedText style={[styles.footerTextRight, { color: "#4CAF50" }]}>
-                  Valid
+            <View style={styles.cardFooter}>
+              <View style={styles.locationRow}>
+                <Feather name="map-pin" size={12} color="#FFFFFF" />
+                <ThemedText style={styles.locationText}>
+                  {getLocation()}
                 </ThemedText>
               </View>
+              <ThemedText style={styles.validText}>Valid ID</ThemedText>
             </View>
           </View>
 
@@ -494,16 +490,12 @@ export default function IDCardScreen() {
               </>
             )}
           </Pressable>
-
-          <ThemedText style={[styles.noteText, { color: theme.textSecondary }]}>
-            Note: PDF will contain only the ID card in exact same format
-          </ThemedText>
         </View>
       ) : (
         <View style={[styles.emptyState, { borderColor: theme.border }]}>
           <Feather name="credit-card" size={48} color={theme.textSecondary} />
           <ThemedText style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-            Search and select a farmer to generate their ID card
+            Search and select a person to generate their ID card
           </ThemedText>
         </View>
       )}
@@ -587,172 +579,132 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   idCard: {
-    width: Math.min(Dimensions.get("window").width - 40, 400),
-    height: 260,
-    borderRadius: 8,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 16,
     overflow: "hidden",
-    elevation: 6,
+    backgroundColor: "#057856",
+    elevation: 8,
     ...Platform.select({
       web: {
-        boxShadow: "0px 4px 12px rgba(0,0,0,0.2)",
+        boxShadow: "0px 4px 16px rgba(0,0,0,0.25)",
       },
       default: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
       },
     }),
-    position: "relative",
-  },
-  quarterCircle: {
-    position: "absolute",
-    top: -60,
-    right: -60,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#1e8767",
-    opacity: 0.8,
   },
   cardHeader: {
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "#057856",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
-  cardHeaderMain: {
-    fontSize: 16,
+  headerTitle: {
+    fontSize: 14,
+    fontWeight: "400",
+    color: "#E8F5E9",
+    fontStyle: "italic",
+  },
+  headerSubtitle: {
+    fontSize: 18,
     fontWeight: "700",
-    textAlign: "center",
-  },
-  cardHeaderSub: {
-    fontSize: 12,
-    fontWeight: "500",
+    color: "#FFFFFF",
     marginTop: 2,
-    textAlign: "center",
   },
   cardBody: {
     flex: 1,
     flexDirection: "row",
-    padding: 15,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: "center",
   },
-  imageSection: {
-    width: 100,
+  photoSection: {
+    width: 80,
+    height: 100,
+    marginRight: 14,
+  },
+  farmerPhoto: {
+    width: 80,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+  },
+  photoPlaceholder: {
+    width: 80,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: "#E8F5E9",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 15,
+    borderWidth: 1,
+    borderColor: "#057856",
+    borderStyle: "dashed",
   },
-  farmerImage: {
-    width: 90,
-    height: 110,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    backgroundColor: "#f5f5f5",
-  },
-  imagePlaceholder: {
-    width: 90,
-    height: 110,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
-  },
-  placeholderText: {
-    fontSize: 9,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  detailsSection: {
+  infoSection: {
     flex: 1,
-    paddingTop: 5,
+    justifyContent: "center",
   },
-
-  /* UPDATED: label/value rows for uniform alignment */
-  fieldRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  infoRow: {
     marginBottom: 8,
   },
-  fieldLabel: {
-    width: 70, // fixed width to ensure uniform spacing
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#E8F5E9",
-  },
-  fieldValue: {
-    flex: 1,
-    fontSize: 14,
+  infoLabel: {
+    fontSize: 11,
+    color: "#057856",
     fontWeight: "500",
-    color: "#FFFFFF",
+    marginBottom: 1,
   },
-
-  /* keep monospace style for IDs */
-  monospace: {
-    fontFamily: Platform.select({ ios: "Courier", android: "monospace" }),
-    fontSize: 13,
-  },
-  validRow: {
-    marginTop: 5,
-  },
-  fieldLabelOld: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  fieldValueOld: {
+  infoValue: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
+    color: "#1a1a1a",
   },
-  validBadge: {
+  regIdText: {
+    fontSize: 12,
+    fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
+    color: "#057856",
+    fontWeight: "700",
+  },
+  phoneRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
   },
-  validText: {
-    fontSize: 13,
-    fontWeight: "600",
+  phoneLabel: {
+    fontSize: 11,
+    color: "#057856",
+    fontWeight: "500",
+  },
+  qrSection: {
+    width: 80,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardFooter: {
-    paddingVertical: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.2)",
-  },
-  footerText: {
-    fontSize: 10,
-    fontWeight: "500",
-    fontStyle: "italic",
-  },
-
-  cardFooterRow: {
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "#057856",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  footerTextLeft: {
-    fontSize: 10,
-    fontWeight: "500",
-    fontStyle: "italic",
-  },
-  footerValidRight: {
+  locationRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  footerTextRight: {
-    fontSize: 10,
+  locationText: {
+    fontSize: 12,
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  validText: {
+    fontSize: 12,
+    color: "#FFFFFF",
     fontWeight: "600",
-    marginLeft: 6,
   },
   actionButtons: {
     flexDirection: "row",
@@ -783,12 +735,6 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: "600",
-  },
-  noteText: {
-    fontSize: 11,
-    textAlign: "center",
-    marginTop: Spacing.md,
-    fontStyle: "italic",
   },
   emptyState: {
     flex: 1,
