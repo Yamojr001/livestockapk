@@ -52,6 +52,10 @@ The Laravel backend is designed to be deployed on Hostinger separately. See `liv
 - Farmer ID card generation (separate screen for agents)
 
 ## Recent Changes
+- Redesigned ID cards with new green theme including QR code, photo, name, reg ID, phone, and location
+- Added "Verify" tab for both agents and admins to verify farmer IDs via QR scan or manual ID entry
+- Installed react-native-qrcode-svg and expo-barcode-scanner packages for QR functionality
+- ID card verification screen supports both QR scanning and manual registration ID lookup
 - Removed automatic ID card generation from submission flow
 - Added dedicated "ID Card" tab for agents to generate farmer ID cards on demand
 - Changed image handling to use URIs instead of base64 encoding for better performance
