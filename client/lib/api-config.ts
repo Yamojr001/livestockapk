@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_URL_KEY = "@livestock_api_url";
 const AUTH_TOKEN_KEY = "@livestock_auth_token";
 
-const DEFAULT_API_URL = "http://127.0.0.1:8000/api/v1";
+const DEFAULT_API_URL = "https://prep-ai.net/api/v1";
 
 export async function getApiBaseUrl() {
   try {
@@ -38,10 +38,7 @@ export async function clearAuthToken() {
   await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
-export async function apiRequest(
-  endpoint,
-  options = {}
-) {
+export async function apiRequest(endpoint, options = {}) {
   const { method = "GET", body, requiresAuth = true } = options;
 
   try {
@@ -62,7 +59,11 @@ export async function apiRequest(
 
     console.log(`API Request: ${method} ${url}`, {
       headers,
-      body: body ? (body.farmer_name ? { ...body, farmer_image: body.farmer_image ? '[IMAGE_URI]' : null } : body) : null,
+      body: body
+        ? body.farmer_name
+          ? { ...body, farmer_image: body.farmer_image ? "[IMAGE_URI]" : null }
+          : body
+        : null,
     });
 
     const response = await fetch(url, {
@@ -74,7 +75,7 @@ export async function apiRequest(
     // Parse response
     let responseData = null;
     const text = await response.text();
-    
+
     if (text) {
       try {
         responseData = JSON.parse(text);
@@ -91,8 +92,10 @@ export async function apiRequest(
       // Handle Laravel validation errors
       if (response.status === 422 && responseData.errors) {
         const firstError = Object.values(responseData.errors)[0];
-        const errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
-        
+        const errorMessage = Array.isArray(firstError)
+          ? firstError[0]
+          : firstError;
+
         return {
           success: false,
           error: errorMessage || "Validation failed",
@@ -102,10 +105,11 @@ export async function apiRequest(
       }
 
       // Handle other errors
-      const errorMessage = responseData?.error || 
-                          responseData?.message || 
-                          responseData?.data?.message || 
-                          `Request failed with status ${response.status}`;
+      const errorMessage =
+        responseData?.error ||
+        responseData?.message ||
+        responseData?.data?.message ||
+        `Request failed with status ${response.status}`;
 
       return {
         success: false,
@@ -133,16 +137,19 @@ export async function apiRequest(
     };
   } catch (error) {
     console.error("API Request Error:", error);
-    
+
     let errorMessage = error.message || "Network error";
-    
+
     // Provide more helpful error messages
-    if (errorMessage.includes("Failed to fetch") || 
-        errorMessage.includes("NetworkError") || 
-        errorMessage.includes("Network request failed")) {
-      errorMessage = "Cannot reach server. Please check your internet connection and try again.";
+    if (
+      errorMessage.includes("Failed to fetch") ||
+      errorMessage.includes("NetworkError") ||
+      errorMessage.includes("Network request failed")
+    ) {
+      errorMessage =
+        "Cannot reach server. Please check your internet connection and try again.";
     }
-    
+
     if (errorMessage.includes("JSON Parse error")) {
       errorMessage = "Server returned invalid response. Please try again.";
     }
@@ -158,22 +165,24 @@ export async function apiRequest(
 export async function testApiConnection() {
   try {
     const baseUrl = await getApiBaseUrl();
-    const testUrl = baseUrl.endsWith('/api/v1') ? baseUrl.replace('/api/v1', '/api') : baseUrl;
-    
+    const testUrl = baseUrl.endsWith("/api/v1")
+      ? baseUrl.replace("/api/v1", "/api")
+      : baseUrl;
+
     console.log("Testing API connection to:", testUrl);
-    
+
     const response = await fetch(testUrl, {
       method: "GET",
-      headers: { 
-        "Accept": "application/json",
-        "Content-Type": "application/json"
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
       },
       timeout: 10000,
     });
-    
+
     const isOk = response.ok;
     console.log("API connection test result:", isOk, response.status);
-    
+
     return isOk;
   } catch (error) {
     console.error("API connection test failed:", error);
@@ -192,7 +201,9 @@ export const submissionApi = {
 
   async getAll(params = {}) {
     const queryString = new URLSearchParams(params).toString();
-    const endpoint = queryString ? `/submissions?${queryString}` : "/submissions";
+    const endpoint = queryString
+      ? `/submissions?${queryString}`
+      : "/submissions";
     return apiRequest(endpoint);
   },
 
