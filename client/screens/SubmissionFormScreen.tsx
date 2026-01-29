@@ -416,16 +416,17 @@ export default function SubmissionFormScreen() {
   const wards = formData.lga ? getWards(formData.lga) : [];
 
   return (
-    <KeyboardAwareScrollViewCompat
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl + 80,
-        paddingHorizontal: Spacing.lg,
-      }}
-      scrollIndicatorInsets={{ bottom: insets.bottom }}
-      showsVerticalScrollIndicator={false}
-    >
+    <>
+      <KeyboardAwareScrollViewCompat
+        style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: tabBarHeight + Spacing.xl + 80,
+          paddingHorizontal: Spacing.lg,
+        }}
+        scrollIndicatorInsets={{ bottom: insets.bottom }}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Feather name="camera" size={18} color={theme.primary} />
@@ -810,35 +811,35 @@ export default function SubmissionFormScreen() {
       </View>
     </KeyboardAwareScrollViewCompat>
 
-      <Modal
-        visible={showSuccess}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowSuccess(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.successContainer, { backgroundColor: theme.backgroundDefault }]}>
-            <LottieView
-              source={require("@/assets/animations/success.json")}
-              autoPlay
-              loop={false}
-              style={styles.lottie}
-              onAnimationFinish={() => {
-                setTimeout(() => {
-                  setShowSuccess(false);
-                  navigation.navigate("HomeTab");
-                }, 1500);
-              }}
-            />
-            <ThemedText style={styles.successTitle}>Success!</ThemedText>
-            <ThemedText style={styles.successMessage}>
-              Submission saved successfully.
-            </ThemedText>
-          </View>
+    <Modal
+      visible={showSuccess}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowSuccess(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.successContainer, { backgroundColor: theme.backgroundDefault }]}>
+          <LottieView
+            source={require("@/assets/animations/success.json")}
+            autoPlay
+            loop={false}
+            style={styles.lottie}
+            onAnimationFinish={() => {
+              setTimeout(() => {
+                setShowSuccess(false);
+                navigation.navigate("HomeTab");
+              }, 1500);
+            }}
+          />
+          <ThemedText style={styles.successTitle}>Success!</ThemedText>
+          <ThemedText style={styles.successMessage}>
+            Farmer record has been saved.
+          </ThemedText>
         </View>
-      </Modal>
-    </>
-  );
+      </View>
+    </Modal>
+  </>
+);
 }
 
 const styles = StyleSheet.create({
