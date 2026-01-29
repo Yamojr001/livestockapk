@@ -820,7 +820,7 @@ export default function SubmissionFormScreen() {
       <View style={styles.modalOverlay}>
         <View style={[styles.successContainer, { backgroundColor: theme.backgroundDefault }]}>
           <LottieView
-            source={require("@/assets/animations/success.json")}
+            source={require("../../assets/animations/success.json")}
             autoPlay
             loop={false}
             style={styles.lottie}
