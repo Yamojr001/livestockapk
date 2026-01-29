@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -6,7 +6,14 @@ import {
   RefreshControl,
   Pressable,
   TextInput,
+  Platform,
+  Alert,
 } from "react-native";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { FormPicker } from "@/components/FormPicker";
+import { getLGAs, getWards } from "@/data/lgaWardData";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,10 +25,11 @@ import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { useTheme } from "@/hooks/useTheme";
 import { storage } from "@/lib/storage";
+import { Button } from "@/components/Button";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import type { LivestockSubmission } from "@/types";
 
-export default function DataManagementScreen() {
+const DataManagementScreen = () => {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
@@ -47,17 +55,60 @@ export default function DataManagementScreen() {
     setRefreshing(false);
   }, [loadData]);
 
-  const filteredSubmissions = submissions.filter((sub) => {
-    const matchesSearch =
-      !searchTerm ||
-      sub.farmer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sub.contact_number?.includes(searchTerm) ||
-      sub.registration_id?.toLowerCase().includes(searchTerm.toLowerCase());
+  const [filterWard, setFilterWard] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
 
-    const matchesLGA = !filterLGA || sub.lga === filterLGA;
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter((sub) => {
+      const matchesSearch =
+        !searchTerm ||
+        sub.farmer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sub.contact_number?.includes(searchTerm) ||
+        sub.registration_id?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesSearch && matchesLGA;
-  });
+      const matchesLGA = !filterLGA || sub.lga === filterLGA;
+      const matchesWard = !filterWard || sub.ward === filterWard;
+
+      const subDate = new Date(sub.created_at);
+      const matchesDate = 
+        (!startDate || subDate >= startDate) && 
+        (!endDate || subDate <= endDate);
+
+      return matchesSearch && matchesLGA && matchesWard && matchesDate;
+    });
+  }, [submissions, searchTerm, filterLGA, filterWard, startDate, endDate]);
+
+  const exportData = async () => {
+    if (filteredSubmissions.length === 0) {
+      Alert.alert("No Data", "No results to export.");
+      return;
+    }
+
+    const header = "Registration ID,Farmer Name,LGA,Ward,Animals,Created At\n";
+    const rows = filteredSubmissions.map(s => 
+      `${s.registration_id},${s.farmer_name},${s.lga},${s.ward},${s.number_of_animals},${s.created_at}`
+    ).join("\n");
+    const csvContent = header + rows;
+
+    if (Platform.OS === 'web') {
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `livestock_export_${new Date().getTime()}.csv`;
+      a.click();
+      return;
+    }
+
+    const filename = `${FileSystem.documentDirectory}export_${Date.now()}.csv`;
+    await FileSystem.writeAsStringAsync(filename, csvContent);
+    await Sharing.shareAsync(filename);
+  };
+
+  const wards = filterLGA ? getWards(filterLGA) : [];
 
   const totalAnimals = filteredSubmissions.reduce(
     (sum, s) => sum + (s.number_of_animals || 0),
@@ -98,37 +149,66 @@ export default function DataManagementScreen() {
           ) : null}
         </View>
 
-        {uniqueLGAs.length > 0 ? (
-          <FlatList
-            horizontal
-            data={uniqueLGAs}
-            keyExtractor={(item) => item}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChips}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => setFilterLGA(filterLGA === item ? null : item)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor:
-                      filterLGA === item ? theme.primaryLight : theme.backgroundDefault,
-                    borderColor: filterLGA === item ? theme.primary : theme.border,
-                  },
-                ]}
-              >
-                <ThemedText
-                  style={[
-                    styles.chipText,
-                    { color: filterLGA === item ? theme.primary : theme.text },
-                  ]}
-                >
-                  {item}
-                </ThemedText>
-              </Pressable>
-            )}
+        <View style={styles.filterRow}>
+          <View style={{ flex: 1 }}>
+            <FormPicker
+              label="Filter LGA"
+              placeholder="All LGAs"
+              value={filterLGA || ""}
+              options={getLGAs()}
+              onChange={(v) => {
+                setFilterLGA(v || null);
+                setFilterWard(null);
+              }}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <FormPicker
+              label="Filter Ward"
+              placeholder="All Wards"
+              value={filterWard || ""}
+              options={wards}
+              disabled={!filterLGA}
+              onChange={(v) => setFilterWard(v || null)}
+            />
+          </View>
+        </View>
+
+        <View style={styles.dateRow}>
+          <Pressable style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
+            <ThemedText style={styles.dateLabel}>Start: {startDate?.toLocaleDateString() || "Pick Date"}</ThemedText>
+          </Pressable>
+          <Pressable style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
+            <ThemedText style={styles.dateLabel}>End: {endDate?.toLocaleDateString() || "Pick Date"}</ThemedText>
+          </Pressable>
+          {(startDate || endDate) && (
+            <Pressable onPress={() => { setStartDate(null); setEndDate(null); }}>
+              <Feather name="x-circle" size={20} color={theme.error} />
+            </Pressable>
+          )}
+        </View>
+
+        {showStartPicker && (
+          <DateTimePicker
+            value={startDate || new Date()}
+            mode="date"
+            onChange={(e, d) => { setShowStartPicker(false); if (d) setStartDate(d); }}
           />
-        ) : null}
+        )}
+        {showEndPicker && (
+          <DateTimePicker
+            value={endDate || new Date()}
+            mode="date"
+            onChange={(e, d) => { setShowEndPicker(false); if (d) setEndDate(d); }}
+          />
+        )}
+
+        <Button 
+          title="Export CSV" 
+          onPress={exportData} 
+          variant="secondary"
+          style={{ marginBottom: Spacing.sm }}
+        />
 
         <View style={styles.statsRow}>
           <View style={[styles.statItem, { backgroundColor: theme.backgroundDefault }]}>
@@ -189,27 +269,31 @@ export default function DataManagementScreen() {
   );
 
   return (
-    <FlatList
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
-        paddingHorizontal: Spacing.lg,
-        flexGrow: 1,
-      }}
-      scrollIndicatorInsets={{ bottom: insets.bottom }}
-      data={filteredSubmissions}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      ListHeaderComponent={ListHeaderComponent}
-      ListEmptyComponent={ListEmptyComponent}
-      ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    />
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      <FlatList
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingHorizontal: Spacing.lg,
+          flexGrow: 1,
+        }}
+        scrollIndicatorInsets={{ bottom: insets.bottom }}
+        data={filteredSubmissions}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      />
+    </View>
   );
-}
+};
+
+export default DataManagementScreen;
 
 const styles = StyleSheet.create({
   header: {
@@ -243,6 +327,27 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  dateButton: {
+    flex: 1,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+  },
+  dateLabel: {
+    fontSize: 12,
   },
   statsRow: {
     flexDirection: "row",

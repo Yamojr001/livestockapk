@@ -42,6 +42,10 @@ export default function MySubmissionsScreen() {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(() => {
+      loadData();
+    }, 20000);
+    return () => clearInterval(interval);
   }, [loadData]);
 
   const onRefresh = useCallback(async () => {

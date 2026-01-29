@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -7,7 +7,10 @@ import {
   Image,
   Pressable,
   Alert,
+  Modal,
+  Animated,
 } from "react-native";
+import LottieView from "lottie-react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -266,6 +269,8 @@ export default function SubmissionFormScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const [showSuccess, setShowSuccess] = useState(false);
+
   const handleSubmit = async () => {
     if (!validate()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -320,22 +325,14 @@ export default function SubmissionFormScreen() {
         created_by: user?.email || "",
       };
 
-      console.log('Submitting data to server...');
-      
       if (isOnline) {
-        // Try to send directly to server
         const response = await apiRequest("/submissions", { 
           method: "POST", 
           body: submissionData 
         });
         
-        console.log('Server response:', response);
-
         if (response.success) {
-          // Successfully saved to server
           const serverData = response.data;
-          
-          // Save to local storage with server data
           await storage.addSubmission({
             ...submissionData,
             ...serverData,
@@ -345,55 +342,10 @@ export default function SubmissionFormScreen() {
             updated_at: new Date().toISOString(),
           });
           
-          console.log('Saved to local storage as synced');
-          
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-          // Reset form
-          setFormData({
-            farmer_name: "",
-            gender: "",
-            age: "",
-            contact_number: "",
-            nin: "",
-            bvn: "",
-            vin: "",
-            bank: "",
-            account_number: "",
-            lga: "",
-            ward: "",
-            association: "",
-            number_of_animals: "",
-            membership_status: "",
-            executive_position: "",
-            has_disease: "",
-            disease_name: "",
-            disease_description: "",
-            literacy_status: "",
-            comments: "",
-          });
-          setGeoLocation(null);
-          setFarmerImage(null);
-          setPreviewFarmerId(null);
-
-          Alert.alert(
-            "Success ✅",
-            "Submission saved and synced with server successfully!",
-            [
-              {
-                text: "OK",
-                onPress: () => {
-                  if (user?.user_role === "agent") {
-                    navigation.navigate("HomeTab");
-                  }
-                },
-              },
-            ]
-          );
+          resetForm();
+          setShowSuccess(true);
         } else {
-          // Server error - save as pending
-          console.warn('Server error, saving as pending:', response.error);
-          
           await storage.addPendingSubmission({
             ...submissionData,
             registration_id: registrationId,
@@ -405,27 +357,11 @@ export default function SubmissionFormScreen() {
             updated_at: new Date().toISOString(),
           });
           
-          Alert.alert(
-            "Saved Offline ⚠️",
-            `Server error: ${response.error}. Data saved locally and will sync when back online.`,
-            [
-              {
-                text: "OK",
-                onPress: () => {
-                  if (user?.user_role === "agent") {
-                    navigation.navigate("HomeTab");
-                  }
-                },
-              },
-            ]
-          );
-          
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          resetForm();
+          setShowSuccess(true);
         }
       } else {
-        // Offline mode - save as pending
-        console.log('Device offline, saving as pending...');
-        
         await storage.addPendingSubmission({
           ...submissionData,
           registration_id: registrationId,
@@ -436,69 +372,45 @@ export default function SubmissionFormScreen() {
           updated_at: new Date().toISOString(),
         });
         
-        console.log('Saved to local storage as pending');
-        
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        // Reset form
-        setFormData({
-          farmer_name: "",
-          gender: "",
-          age: "",
-          contact_number: "",
-          nin: "",
-          bvn: "",
-          vin: "",
-          bank: "",
-          account_number: "",
-          lga: "",
-          ward: "",
-          association: "",
-          number_of_animals: "",
-          membership_status: "",
-          executive_position: "",
-          has_disease: "",
-          disease_name: "",
-          disease_description: "",
-          literacy_status: "",
-          comments: "",
-        });
-        setGeoLocation(null);
-        setFarmerImage(null);
-        setPreviewFarmerId(null);
-
-        Alert.alert(
-          "Saved Offline 📱",
-          "Data saved locally and will sync automatically when you're back online.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                if (user?.user_role === "agent") {
-                  navigation.navigate("HomeTab");
-                }
-              },
-            },
-          ]
-        );
+        resetForm();
+        setShowSuccess(true);
       }
     } catch (error: any) {
       console.error("Submit error:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      
-      Alert.alert(
-        "Error ❌",
-        "Failed to save submission. Please try again.",
-        [{ text: "OK" }]
-      );
-      
-      setErrors((prev) => ({
-        ...prev,
-        submit: "Failed to save submission: " + (error.message || String(error)),
-      }));
+      Alert.alert("Error ❌", "Failed to save submission. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      farmer_name: "",
+      gender: "",
+      age: "",
+      contact_number: "",
+      nin: "",
+      bvn: "",
+      vin: "",
+      bank: "",
+      account_number: "",
+      lga: "",
+      ward: "",
+      association: "",
+      number_of_animals: "",
+      membership_status: "",
+      executive_position: "",
+      has_disease: "",
+      disease_name: "",
+      disease_description: "",
+      literacy_status: "",
+      comments: "",
+    });
+    setGeoLocation(null);
+    setFarmerImage(null);
+    setPreviewFarmerId(null);
   };
 
   const wards = formData.lga ? getWards(formData.lga) : [];
@@ -897,10 +809,71 @@ export default function SubmissionFormScreen() {
         </ThemedText>
       </View>
     </KeyboardAwareScrollViewCompat>
+
+      <Modal
+        visible={showSuccess}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccess(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.successContainer, { backgroundColor: theme.backgroundDefault }]}>
+            <LottieView
+              source={require("@/assets/animations/success.json")}
+              autoPlay
+              loop={false}
+              style={styles.lottie}
+              onAnimationFinish={() => {
+                setTimeout(() => {
+                  setShowSuccess(false);
+                  navigation.navigate("HomeTab");
+                }, 1500);
+              }}
+            />
+            <ThemedText style={styles.successTitle}>Success!</ThemedText>
+            <ThemedText style={styles.successMessage}>
+              Submission saved successfully.
+            </ThemedText>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  successContainer: {
+    width: "80%",
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    alignItems: "center",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  lottie: {
+    width: 150,
+    height: 150,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginTop: Spacing.md,
+  },
+  successMessage: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: Spacing.sm,
+    opacity: 0.7,
+  },
   section: {
     marginBottom: Spacing.xl,
     gap: Spacing.md,
