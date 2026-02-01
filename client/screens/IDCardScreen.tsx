@@ -232,6 +232,36 @@ export default function IDCardScreen() {
     }
   };
 
+  const getImageUrl = (imagePath: string | null | undefined) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith("http") || imagePath.startsWith("data:") || imagePath.startsWith("file:")) {
+      return imagePath;
+    }
+    // Laravel storage path handling
+    const baseUrl = "https://prep-ai.net";
+    return `${baseUrl}/storage/${imagePath}`;
+  };
+
+  const getQRValue = () => {
+    const regId = selectedSubmission?.registration_id || selectedSubmission?.farmer_id || "";
+    return `https://livestock.jigawa.gov.ng/verify/${regId}`;
+  };
+
+  const getLocation = () => {
+    const ward = selectedSubmission?.ward || "";
+    const lga = selectedSubmission?.lga || "";
+    if (ward && lga) return `${ward}, ${lga}`;
+    return ward || lga || "N/A";
+  };
+
+  const getDesignation = () => {
+    const sub = selectedSubmission as any;
+    if (sub?._isUser) {
+      return sub._userRole === "admin" ? "Administrator" : "Field Agent";
+    }
+    return "Farmer";
+  };
+
   const renderSearchResult = ({ item }: { item: LivestockSubmission }) => (
     <Pressable
       onPress={() => {
@@ -260,26 +290,6 @@ export default function IDCardScreen() {
       </View>
     </Pressable>
   );
-
-  const getQRValue = () => {
-    const regId = selectedSubmission?.registration_id || selectedSubmission?.farmer_id || "";
-    return `https://livestock.jigawa.gov.ng/verify/${regId}`;
-  };
-
-  const getLocation = () => {
-    const ward = selectedSubmission?.ward || "";
-    const lga = selectedSubmission?.lga || "";
-    if (ward && lga) return `${ward}, ${lga}`;
-    return ward || lga || "N/A";
-  };
-
-  const getDesignation = () => {
-    const sub = selectedSubmission as any;
-    if (sub?._isUser) {
-      return sub._userRole === "admin" ? "Administrator" : "Field Agent";
-    }
-    return "Farmer";
-  };
 
   return (
     <ScrollView
@@ -352,9 +362,9 @@ export default function IDCardScreen() {
 
             <View style={styles.cardBody}>
               <View style={styles.photoSection}>
-                {selectedSubmission.farmer_image ? (
+                {getImageUrl(selectedSubmission.farmer_image) ? (
                   <Image
-                    source={{ uri: selectedSubmission.farmer_image }}
+                    source={{ uri: getImageUrl(selectedSubmission.farmer_image)! }}
                     style={styles.farmerPhoto}
                     resizeMode="cover"
                   />
@@ -384,7 +394,7 @@ export default function IDCardScreen() {
 
                 <View style={styles.infoRow}>
                   <View style={styles.phoneRow}>
-                    <Feather name="phone" size={12} color="#057856" />
+                    <Feather name="phone" size={10} color="#057856" />
                     <ThemedText style={styles.phoneLabel}>Phone</ThemedText>
                   </View>
                   <ThemedText style={styles.infoValue}>
@@ -396,8 +406,8 @@ export default function IDCardScreen() {
               <View style={styles.qrSection}>
                 <QRCode
                   value={getQRValue()}
-                  size={70}
-                  backgroundColor="white"
+                  size={75}
+                  backgroundColor="transparent"
                   color="#000"
                 />
               </View>
@@ -405,7 +415,7 @@ export default function IDCardScreen() {
 
             <View style={styles.cardFooter}>
               <View style={styles.locationRow}>
-                <Feather name="map-pin" size={12} color="#FFFFFF" />
+                <Feather name="map-pin" size={10} color="#FFFFFF" />
                 <ThemedText style={styles.locationText}>
                   {getLocation()}
                 </ThemedText>
@@ -581,35 +591,37 @@ const styles = StyleSheet.create({
   idCard: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: "hidden",
     backgroundColor: "#057856",
     elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
     ...Platform.select({
       web: {
-        boxShadow: "0px 4px 16px rgba(0,0,0,0.25)",
+        boxShadow: "0px 8px 24px rgba(0,0,0,0.3)",
       },
       default: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
       },
     }),
   },
   cardHeader: {
     backgroundColor: "#057856",
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 16,
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "400",
-    color: "#E8F5E9",
-    fontStyle: "italic",
+    color: "#FFFFFF",
+    opacity: 0.9,
   },
   headerSubtitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
     marginTop: 2,
@@ -617,31 +629,31 @@ const styles = StyleSheet.create({
   cardBody: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "transparent",
     paddingHorizontal: 16,
     paddingVertical: 12,
     alignItems: "center",
   },
   photoSection: {
-    width: 80,
+    width: 85,
     height: 100,
-    marginRight: 14,
+    marginRight: 12,
   },
   farmerPhoto: {
-    width: 80,
+    width: 85,
     height: 100,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: "#f0f0f0",
   },
   photoPlaceholder: {
-    width: 80,
+    width: 85,
     height: 100,
-    borderRadius: 8,
-    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#057856",
+    borderColor: "rgba(255,255,255,0.3)",
     borderStyle: "dashed",
   },
   infoSection: {
@@ -649,60 +661,69 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   infoRow: {
-    marginBottom: 8,
+    marginBottom: 5,
   },
   infoLabel: {
-    fontSize: 11,
-    color: "#057856",
+    fontSize: 10,
+    color: "#FFFFFF",
+    opacity: 0.8,
     fontWeight: "500",
     marginBottom: 1,
   },
   infoValue: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1a1a1a",
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   regIdText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
-    color: "#057856",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
   phoneRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    marginTop: 2,
   },
   phoneLabel: {
-    fontSize: 11,
-    color: "#057856",
+    fontSize: 10,
+    color: "#FFFFFF",
+    opacity: 0.8,
     fontWeight: "500",
   },
   qrSection: {
-    width: 80,
+    width: 85,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 4,
+    marginLeft: 8,
   },
   cardFooter: {
-    backgroundColor: "#057856",
+    backgroundColor: "transparent",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.1)",
   },
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   locationText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#FFFFFF",
     fontWeight: "500",
   },
   validText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#FFFFFF",
     fontWeight: "600",
   },

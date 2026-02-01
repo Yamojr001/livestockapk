@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_URL_KEY = "@livestock_api_url";
 const AUTH_TOKEN_KEY = "@livestock_auth_token";
 
-const DEFAULT_API_URL = "https://prep-ai.net/api/v1";
+const DEFAULT_API_URL = "https://livestock.hargei.org/api/v1";
 
 export async function getApiBaseUrl() {
   try {
