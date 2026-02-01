@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   StyleSheet,
@@ -13,7 +13,6 @@ import {
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { BarCodeScanner } from "expo-barcode-scanner";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { storage } from "@/lib/storage";
@@ -31,17 +30,8 @@ export default function VerifyIDScreen() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [showScanner, setShowScanner] = useState(false);
   const [verifiedFarmer, setVerifiedFarmer] = useState<LivestockSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === "granted");
-    })();
-  }, []);
 
   const searchFarmer = async (regId: string) => {
     if (!regId.trim()) return;
@@ -79,15 +69,6 @@ export default function VerifyIDScreen() {
     }
   };
 
-  const handleBarCodeScanned = ({ data }: { data: string }) => {
-    setShowScanner(false);
-    const regId = data.includes("/verify/")
-      ? data.split("/verify/").pop() || ""
-      : data;
-    setSearchTerm(regId);
-    searchFarmer(regId);
-  };
-
   const handleSearch = () => {
     searchFarmer(searchTerm);
   };
@@ -97,29 +78,6 @@ export default function VerifyIDScreen() {
     setVerifiedFarmer(null);
     setError(null);
   };
-
-  if (showScanner) {
-    return (
-      <View style={[styles.scannerContainer, { paddingTop: headerHeight }]}>
-        <BarCodeScanner
-          onBarCodeScanned={handleBarCodeScanned}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.scannerOverlay}>
-          <View style={styles.scannerFrame} />
-          <ThemedText style={styles.scannerText}>
-            Position the QR code within the frame
-          </ThemedText>
-        </View>
-        <Pressable
-          onPress={() => setShowScanner(false)}
-          style={styles.closeScannerButton}
-        >
-          <Feather name="x" size={24} color="#FFFFFF" />
-        </Pressable>
-      </View>
-    );
-  }
 
   return (
     <ScrollView
@@ -133,7 +91,7 @@ export default function VerifyIDScreen() {
     >
       <ThemedText style={styles.title}>Verify Farmer ID</ThemedText>
       <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Scan QR code or enter registration ID to verify
+        Enter registration ID to verify farmer
       </ThemedText>
 
       <View style={styles.searchRow}>
@@ -179,21 +137,6 @@ export default function VerifyIDScreen() {
             </>
           )}
         </Pressable>
-
-        {hasPermission && (
-          <Pressable
-            onPress={() => setShowScanner(true)}
-            style={[
-              styles.scanButton,
-              { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
-            ]}
-          >
-            <Feather name="camera" size={18} color={theme.text} />
-            <ThemedText style={[styles.scanButtonText, { color: theme.text }]}>
-              Scan QR
-            </ThemedText>
-          </Pressable>
-        )}
       </View>
 
       {error ? (
@@ -302,7 +245,7 @@ export default function VerifyIDScreen() {
         <View style={[styles.emptyState, { borderColor: theme.border }]}>
           <Feather name="shield" size={48} color={theme.textSecondary} />
           <ThemedText style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-            Enter a registration ID or scan a QR code to verify a farmer's identity
+            Enter a registration ID to verify a farmer's identity
           </ThemedText>
         </View>
       ) : null}
@@ -355,54 +298,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
-  },
-  scanButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-  },
-  scanButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  scannerContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  scannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scannerFrame: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    borderRadius: 16,
-    backgroundColor: "transparent",
-  },
-  scannerText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    marginTop: Spacing.lg,
-    textAlign: "center",
-  },
-  closeScannerButton: {
-    position: "absolute",
-    top: 60,
-    right: 20,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   errorCard: {
     flexDirection: "row",
