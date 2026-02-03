@@ -488,7 +488,7 @@ export default function SubmissionFormScreen() {
           label="Gender"
           placeholder="Select gender"
           value={formData.gender}
-          options={["Male", "Female", "Other"]}
+          options={["Male", "Female"]}
           onChange={(v) => updateField("gender", v)}
         />
 
