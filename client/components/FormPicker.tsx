@@ -17,7 +17,7 @@ interface FormPickerProps {
   label?: string;
   placeholder?: string;
   value?: string;
-  options: string[];
+  options: Array<{ label: string; value: string }> | string[];
   onChange: (value: string) => void;
   error?: string;
   disabled?: boolean;
@@ -36,10 +36,27 @@ export function FormPicker({
   const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false);
 
-  const handleSelect = (option: string) => {
-    onChange(option);
+  // Normalize options to always be objects with label and value
+  const normalizedOptions = React.useMemo(() => {
+    if (!options || options.length === 0) return [];
+    
+    // If first item is a string, convert all to objects
+    if (typeof options[0] === 'string') {
+      return (options as string[]).map(option => ({
+        label: option,
+        value: option
+      }));
+    }
+    
+    return options as Array<{ label: string; value: string }>;
+  }, [options]);
+
+  const handleSelect = (optionValue: string) => {
+    onChange(optionValue);
     setVisible(false);
   };
+
+  const selectedOption = normalizedOptions.find(opt => opt.value === value);
 
   return (
     <View style={styles.container}>
@@ -65,7 +82,7 @@ export function FormPicker({
             { color: value ? theme.text : theme.textSecondary },
           ]}
         >
-          {value || placeholder}
+          {selectedOption ? selectedOption.label : placeholder}
         </ThemedText>
         <Feather name="chevron-down" size={18} color={theme.textSecondary} />
       </Pressable>
@@ -103,16 +120,16 @@ export function FormPicker({
               </Pressable>
             </View>
             <FlatList
-              data={options}
-              keyExtractor={(item) => item}
+              data={normalizedOptions}
+              keyExtractor={(item) => item.value}
               renderItem={({ item }) => (
                 <Pressable
-                  onPress={() => handleSelect(item)}
+                  onPress={() => handleSelect(item.value)}
                   style={[
                     styles.option,
                     {
                       backgroundColor:
-                        item === value
+                        item.value === value
                           ? theme.primaryLight
                           : "transparent",
                     },
@@ -121,12 +138,12 @@ export function FormPicker({
                   <ThemedText
                     style={[
                       styles.optionText,
-                      item === value && { color: theme.primary, fontWeight: "600" },
+                      item.value === value && { color: theme.primary, fontWeight: "600" },
                     ]}
                   >
-                    {item}
+                    {item.label}
                   </ThemedText>
-                  {item === value ? (
+                  {item.value === value ? (
                     <Feather name="check" size={18} color={theme.primary} />
                   ) : null}
                 </Pressable>

@@ -5,6 +5,9 @@ import {
   FlatList,
   RefreshControl,
   Pressable,
+  Modal,
+  ScrollView,
+  Image,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -31,6 +34,7 @@ export default function MySubmissionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [submissions, setSubmissions] = useState<LivestockSubmission[]>([]);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [selectedFarmer, setSelectedFarmer] = useState<LivestockSubmission | null>(null);
 
   const loadData = useCallback(async () => {
     const allSubmissions = await storage.getSubmissions();
@@ -54,6 +58,81 @@ export default function MySubmissionsScreen() {
     setRefreshing(false);
   }, [loadData]);
 
+  const getImageUrl = (imagePath: string | null | undefined) => {
+    if (!imagePath) return null;
+    if (
+      imagePath.startsWith("http") ||
+      imagePath.startsWith("data:") ||
+      imagePath.startsWith("file:") ||
+      imagePath.startsWith("blob:")
+    ) {
+      return imagePath;
+    }
+    const baseUrl = "https://livestock.jigawa.gov.ng";
+    return `${baseUrl}/storage/${imagePath}`;
+  };
+
+  const FarmerDetailsModal = () => {
+    if (!selectedFarmer) return null;
+
+    return (
+      <Modal
+        visible={!!selectedFarmer}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedFarmer(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Farmer Details</ThemedText>
+              <Pressable onPress={() => setSelectedFarmer(null)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <View style={styles.detailPhotoContainer}>
+                {getImageUrl(selectedFarmer.farmer_image) ? (
+                  <Image
+                    source={{ uri: getImageUrl(selectedFarmer.farmer_image)! }}
+                    style={styles.detailPhoto}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.detailPhoto, styles.detailPhotoPlaceholder]}>
+                    <Feather name="user" size={60} color={theme.textSecondary} />
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.detailSection}>
+                <DetailRow label="Full Name" value={selectedFarmer.farmer_name} />
+                <DetailRow label="Registration ID" value={selectedFarmer.registration_id} />
+                <DetailRow label="Phone Number" value={selectedFarmer.contact_number} />
+                <DetailRow label="Gender" value={selectedFarmer.gender} />
+                <DetailRow label="Age" value={selectedFarmer.age} />
+                <DetailRow label="Association" value={selectedFarmer.association} />
+                <DetailRow label="LGA" value={selectedFarmer.lga} />
+                <DetailRow label="Ward" value={selectedFarmer.ward} />
+                <DetailRow label="Address" value={selectedFarmer.address} />
+                <DetailRow label="Animals" value={String(selectedFarmer.number_of_animals || 0)} />
+                <DetailRow label="Date Registered" value={selectedFarmer.created_at} />
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const DetailRow = ({ label, value }: { label: string, value?: string }) => (
+    <View style={styles.detailRow}>
+      <ThemedText style={styles.detailLabel}>{label}</ThemedText>
+      <ThemedText style={styles.detailValue}>{value || "N/A"}</ThemedText>
+    </View>
+  );
+
   const filteredSubmissions = submissions.filter((sub) => {
     if (filter === "all") return true;
     return sub.submission_status === filter;
@@ -68,7 +147,11 @@ export default function MySubmissionsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: LivestockSubmission }) => (
-      <SubmissionCard submission={item} showSyncStatus />
+      <SubmissionCard 
+        submission={item} 
+        showSyncStatus 
+        onPress={() => setSelectedFarmer(item)}
+      />
     ),
     []
   );
@@ -171,25 +254,28 @@ export default function MySubmissionsScreen() {
   );
 
   return (
-    <FlatList
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
-        paddingHorizontal: Spacing.lg,
-        flexGrow: 1,
-      }}
-      scrollIndicatorInsets={{ bottom: insets.bottom }}
-      data={filteredSubmissions}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      ListHeaderComponent={ListHeaderComponent}
-      ListEmptyComponent={ListEmptyComponent}
-      ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    />
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      <FlatList
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingHorizontal: Spacing.lg,
+          flexGrow: 1,
+        }}
+        scrollIndicatorInsets={{ bottom: insets.bottom }}
+        data={filteredSubmissions}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      />
+      <FarmerDetailsModal />
+    </View>
   );
 }
 
@@ -214,5 +300,66 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: Spacing.lg,
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  modalBody: {
+    paddingBottom: Spacing.xl,
+  },
+  detailPhotoContainer: {
+    alignItems: "center",
+    marginBottom: Spacing.xl,
+  },
+  detailPhoto: {
+    width: 120,
+    height: 150,
+    borderRadius: 16,
+    backgroundColor: "#f0f0f0",
+  },
+  detailPhotoPlaceholder: {
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderStyle: "dashed",
+  },
+  detailSection: {
+    gap: Spacing.md,
+  },
+  detailRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#f5f5f5",
+    paddingBottom: Spacing.sm,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

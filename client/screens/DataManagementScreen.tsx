@@ -28,6 +28,7 @@ import { storage } from "@/lib/storage";
 import { Button } from "@/components/Button";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import type { LivestockSubmission } from "@/types";
+import { Modal, ScrollView, Image } from "react-native";
 
 const DataManagementScreen = () => {
   const headerHeight = useHeaderHeight();
@@ -56,10 +57,12 @@ const DataManagementScreen = () => {
   }, [loadData]);
 
   const [filterWard, setFilterWard] = useState<string | null>(null);
+  const [filterAssociation, setFilterAssociation] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [selectedFarmer, setSelectedFarmer] = useState<LivestockSubmission | null>(null);
 
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((sub) => {
@@ -71,15 +74,16 @@ const DataManagementScreen = () => {
 
       const matchesLGA = !filterLGA || sub.lga === filterLGA;
       const matchesWard = !filterWard || sub.ward === filterWard;
+      const matchesAssociation = !filterAssociation || sub.association === filterAssociation;
 
       const subDate = new Date(sub.created_at);
       const matchesDate = 
         (!startDate || subDate >= startDate) && 
         (!endDate || subDate <= endDate);
 
-      return matchesSearch && matchesLGA && matchesWard && matchesDate;
+      return matchesSearch && matchesLGA && matchesWard && matchesAssociation && matchesDate;
     });
-  }, [submissions, searchTerm, filterLGA, filterWard, startDate, endDate]);
+  }, [submissions, searchTerm, filterLGA, filterWard, filterAssociation, startDate, endDate]);
 
   const exportData = async () => {
     if (filteredSubmissions.length === 0) {
@@ -87,9 +91,9 @@ const DataManagementScreen = () => {
       return;
     }
 
-    const header = "Registration ID,Farmer Name,LGA,Ward,Animals,Created At\n";
+    const header = "Registration ID,Farmer Name,LGA,Ward,Association,Animals,Created At\n";
     const rows = filteredSubmissions.map(s => 
-      `${s.registration_id},${s.farmer_name},${s.lga},${s.ward},${s.number_of_animals},${s.created_at}`
+      `${s.registration_id},${s.farmer_name},${s.lga},${s.ward},${s.association},${s.number_of_animals},${s.created_at}`
     ).join("\n");
     const csvContent = header + rows;
 
@@ -117,12 +121,87 @@ const DataManagementScreen = () => {
 
   const uniqueLGAs = [...new Set(submissions.map((s) => s.lga))];
   const uniqueWards = [...new Set(filteredSubmissions.map((s) => s.ward))];
+  const uniqueAssociations = [...new Set(submissions.map((s) => s.association).filter(Boolean))];
 
   const renderItem = useCallback(
     ({ item }: { item: LivestockSubmission }) => (
-      <SubmissionCard submission={item} showSyncStatus />
+      <SubmissionCard 
+        submission={item} 
+        showSyncStatus 
+        onPress={() => setSelectedFarmer(item)}
+      />
     ),
     []
+  );
+
+  const getImageUrl = (imagePath: string | null | undefined) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith("http") || imagePath.startsWith("data:") || imagePath.startsWith("file:")) {
+      return imagePath;
+    }
+    const baseUrl = "https://livestock.jigawa.gov.ng";
+    return `${baseUrl}/storage/${imagePath}`;
+  };
+
+  const FarmerDetailsModal = () => {
+    if (!selectedFarmer) return null;
+
+    return (
+      <Modal
+        visible={!!selectedFarmer}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedFarmer(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Farmer Details</ThemedText>
+              <Pressable onPress={() => setSelectedFarmer(null)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <View style={styles.detailPhotoContainer}>
+                {getImageUrl(selectedFarmer.farmer_image) ? (
+                  <Image
+                    source={{ uri: getImageUrl(selectedFarmer.farmer_image)! }}
+                    style={styles.detailPhoto}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.detailPhoto, styles.detailPhotoPlaceholder]}>
+                    <Feather name="user" size={60} color={theme.textSecondary} />
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.detailSection}>
+                <DetailRow label="Full Name" value={selectedFarmer.farmer_name} />
+                <DetailRow label="Registration ID" value={selectedFarmer.registration_id} />
+                <DetailRow label="Phone Number" value={selectedFarmer.contact_number} />
+                <DetailRow label="Gender" value={selectedFarmer.gender} />
+                <DetailRow label="Age" value={selectedFarmer.age} />
+                <DetailRow label="Association" value={selectedFarmer.association} />
+                <DetailRow label="LGA" value={selectedFarmer.lga} />
+                <DetailRow label="Ward" value={selectedFarmer.ward} />
+                <DetailRow label="Address" value={selectedFarmer.address} />
+                <DetailRow label="Animals" value={String(selectedFarmer.number_of_animals || 0)} />
+                <DetailRow label="Date Registered" value={selectedFarmer.created_at} />
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const DetailRow = ({ label, value }: { label: string, value?: string }) => (
+    <View style={styles.detailRow}>
+      <ThemedText style={styles.detailLabel}>{label}</ThemedText>
+      <ThemedText style={styles.detailValue}>{value || "N/A"}</ThemedText>
+    </View>
   );
 
   const ListHeaderComponent = useCallback(
@@ -152,7 +231,7 @@ const DataManagementScreen = () => {
         <View style={styles.filterRow}>
           <View style={{ flex: 1 }}>
             <FormPicker
-              label="Filter LGA"
+              label="LGA"
               placeholder="All LGAs"
               value={filterLGA || ""}
               options={getLGAs()}
@@ -164,7 +243,7 @@ const DataManagementScreen = () => {
           </View>
           <View style={{ flex: 1 }}>
             <FormPicker
-              label="Filter Ward"
+              label="Ward"
               placeholder="All Wards"
               value={filterWard || ""}
               options={wards}
@@ -174,28 +253,73 @@ const DataManagementScreen = () => {
           </View>
         </View>
 
-        <View style={styles.dateRow}>
-          <Pressable style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
-            <ThemedText style={styles.dateLabel}>Start: {startDate?.toLocaleDateString() || "Pick Date"}</ThemedText>
-          </Pressable>
-          <Pressable style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
-            <ThemedText style={styles.dateLabel}>End: {endDate?.toLocaleDateString() || "Pick Date"}</ThemedText>
-          </Pressable>
-          {(startDate || endDate) && (
-            <Pressable onPress={() => { setStartDate(null); setEndDate(null); }}>
-              <Feather name="x-circle" size={20} color={theme.error} />
-            </Pressable>
-          )}
+        <View style={styles.filterRow}>
+          <View style={{ flex: 1 }}>
+            <FormPicker
+              label="Association"
+              placeholder="All Associations"
+              value={filterAssociation || ""}
+              options={uniqueAssociations.map(a => ({ label: a, value: a }))}
+              onChange={(v) => setFilterAssociation(v || null)}
+            />
+          </View>
         </View>
 
-        {showStartPicker && (
+        <View style={styles.dateRow}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.dateFieldLabel}>Start Date</ThemedText>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                style={{
+                  padding: 8,
+                  borderRadius: 4,
+                  border: `1px solid ${theme.border}`,
+                  backgroundColor: theme.backgroundDefault,
+                  color: theme.text,
+                  width: '100%',
+                }}
+                onChange={(e) => setStartDate(e.target.value ? new Date(e.target.value) : null)}
+                value={startDate ? startDate.toISOString().split('T')[0] : ''}
+              />
+            ) : (
+              <Pressable style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
+                <ThemedText style={styles.dateLabel}>{startDate?.toLocaleDateString() || "Pick Date"}</ThemedText>
+              </Pressable>
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.dateFieldLabel}>End Date</ThemedText>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                style={{
+                  padding: 8,
+                  borderRadius: 4,
+                  border: `1px solid ${theme.border}`,
+                  backgroundColor: theme.backgroundDefault,
+                  color: theme.text,
+                  width: '100%',
+                }}
+                onChange={(e) => setEndDate(e.target.value ? new Date(e.target.value) : null)}
+                value={endDate ? endDate.toISOString().split('T')[0] : ''}
+              />
+            ) : (
+              <Pressable style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
+                <ThemedText style={styles.dateLabel}>{endDate?.toLocaleDateString() || "Pick Date"}</ThemedText>
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {Platform.OS !== 'web' && showStartPicker && (
           <DateTimePicker
             value={startDate || new Date()}
             mode="date"
             onChange={(e, d) => { setShowStartPicker(false); if (d) setStartDate(d); }}
           />
         )}
-        {showEndPicker && (
+        {Platform.OS !== 'web' && showEndPicker && (
           <DateTimePicker
             value={endDate || new Date()}
             mode="date"
@@ -289,6 +413,7 @@ const DataManagementScreen = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       />
+      <FarmerDetailsModal />
     </View>
   );
 };
@@ -349,6 +474,12 @@ const styles = StyleSheet.create({
   dateLabel: {
     fontSize: 12,
   },
+  dateFieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+    color: "#666",
+  },
   statsRow: {
     flexDirection: "row",
     gap: Spacing.sm,
@@ -366,5 +497,66 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 11,
     marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: Spacing.lg,
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  modalBody: {
+    paddingBottom: Spacing.xl,
+  },
+  detailPhotoContainer: {
+    alignItems: "center",
+    marginBottom: Spacing.xl,
+  },
+  detailPhoto: {
+    width: 120,
+    height: 150,
+    borderRadius: 16,
+    backgroundColor: "#f0f0f0",
+  },
+  detailPhotoPlaceholder: {
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderStyle: "dashed",
+  },
+  detailSection: {
+    gap: Spacing.md,
+  },
+  detailRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#f5f5f5",
+    paddingBottom: Spacing.sm,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
