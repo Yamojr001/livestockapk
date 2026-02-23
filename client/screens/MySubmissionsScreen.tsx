@@ -60,16 +60,27 @@ export default function MySubmissionsScreen() {
 
   const getImageUrl = (imagePath: string | null | undefined) => {
     if (!imagePath) return null;
+    
+    if (imagePath.startsWith("blob:")) {
+      const regId = selectedFarmer?.registration_id || selectedFarmer?.farmer_id;
+      if (regId) {
+        return `https://renthousehq.com/storage/farmers/${regId}.jpg`;
+      }
+      return imagePath;
+    }
+
     if (
       imagePath.startsWith("http") ||
       imagePath.startsWith("data:") ||
-      imagePath.startsWith("file:") ||
-      imagePath.startsWith("blob:")
+      imagePath.startsWith("file:")
     ) {
       return imagePath;
     }
-    const baseUrl = "https://livestock.jigawa.gov.ng";
-    return `${baseUrl}/storage/${imagePath}`;
+    
+    if (imagePath.includes('/')) {
+        return `https://renthousehq.com/storage/${imagePath}`;
+    }
+    return `https://renthousehq.com/storage/farmers/${imagePath}`;
   };
 
   const FarmerDetailsModal = () => {

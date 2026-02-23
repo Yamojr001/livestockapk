@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AdminTabNavigator from "@/navigation/AdminTabNavigator";
 import AgentTabNavigator from "@/navigation/AgentTabNavigator";
+import MinistryTabNavigator from "@/navigation/MinistryTabNavigator";
 import LoginScreen from "@/screens/LoginScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +49,12 @@ export default function RootStackNavigator() {
         <Stack.Screen
           name="AdminMain"
           component={AdminTabNavigator}
+          options={{ headerShown: false }}
+        />
+      ) : user?.user_role === "ministry" ? (
+        <Stack.Screen
+          name="MinistryMain"
+          component={MinistryTabNavigator}
           options={{ headerShown: false }}
         />
       ) : (

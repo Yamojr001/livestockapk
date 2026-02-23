@@ -45,7 +45,9 @@ class UserController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6',
             'phone_number' => 'nullable|string|max:20',
-            'user_role' => 'required|in:admin,agent',
+            'age' => 'nullable|integer',
+            'gender' => 'nullable|string|max:20',
+            'user_role' => 'required|in:admin,agent,ministry',
             'status' => 'required|in:active,inactive',
             'user_image' => 'nullable|string',
         ];
@@ -58,6 +60,22 @@ class UserController extends Controller
         }
 
         $validated = $request->validate($rules);
+
+        // Handle base64 image if present
+        if ($request->has('user_image') && str_starts_with($request->user_image, 'data:image')) {
+            try {
+                $imageData = $request->user_image;
+                $format = strpos($imageData, 'data:image/png') !== false ? 'png' : 'jpg';
+                $image = str_replace(['data:image/png;base64,', 'data:image/jpeg;base64,', ' '], ['', '', '+'], $imageData);
+                $imageName = 'user_' . time() . '_' . uniqid() . '.' . $format;
+                \Illuminate\Support\Facades\Storage::disk('public')->put('users/' . $imageName, base64_decode($image));
+                $validated['user_image'] = 'users/' . $imageName;
+            } catch (\Exception $e) {
+                // Fallback to null or keep as is if processing fails
+            }
+        } else if ($request->has('user_image') && empty($request->user_image)) {
+            $validated['user_image'] = null;
+        }
 
         $validated['password'] = Hash::make($validated['password']);
 
@@ -126,7 +144,9 @@ class UserController extends Controller
             'full_name' => 'sometimes|string|max:255',
             'email' => 'sometimes|string|email|max:255|unique:users,email,' . $user->id,
             'phone_number' => 'nullable|string|max:20',
-            'user_role' => 'sometimes|in:admin,agent',
+            'age' => 'nullable|integer',
+            'gender' => 'nullable|string|max:20',
+            'user_role' => 'sometimes|in:admin,agent,ministry',
             'status' => 'sometimes|in:active,inactive',
             'user_image' => 'nullable|string',
         ];
@@ -142,7 +162,23 @@ class UserController extends Controller
 
         $validated = $request->validate($rules);
 
-        if ($newRole === 'admin') {
+        // Handle base64 image if present
+        if ($request->has('user_image') && str_starts_with($request->user_image, 'data:image')) {
+            try {
+                $imageData = $request->user_image;
+                $format = strpos($imageData, 'data:image/png') !== false ? 'png' : 'jpg';
+                $image = str_replace(['data:image/png;base64,', 'data:image/jpeg;base64,', ' '], ['', '', '+'], $imageData);
+                $imageName = 'user_' . time() . '_' . uniqid() . '.' . $format;
+                \Illuminate\Support\Facades\Storage::disk('public')->put('users/' . $imageName, base64_decode($image));
+                $validated['user_image'] = 'users/' . $imageName;
+            } catch (\Exception $e) {
+                // Fallback to null or keep as is if processing fails
+            }
+        } else if ($request->has('user_image') && empty($request->user_image)) {
+            $validated['user_image'] = null;
+        }
+
+        if ($newRole === 'admin' || $newRole === 'ministry') {
             $validated['assigned_lga'] = null;
             $validated['assigned_ward'] = null;
         }
@@ -178,6 +214,7 @@ class UserController extends Controller
         $activeUsers = User::where('status', 'active')->count();
         $adminCount = User::where('user_role', 'admin')->count();
         $agentCount = User::where('user_role', 'agent')->count();
+        $ministryCount = User::where('user_role', 'ministry')->count();
 
         return response()->json([
             'success' => true,
@@ -186,6 +223,7 @@ class UserController extends Controller
                 'active_users' => $activeUsers,
                 'admin_count' => $adminCount,
                 'agent_count' => $agentCount,
+                'ministry_count' => $ministryCount,
             ],
         ]);
     }

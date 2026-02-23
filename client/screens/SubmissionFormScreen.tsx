@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { FormInput } from "@/components/FormInput";
@@ -121,7 +122,6 @@ export default function SubmissionFormScreen() {
       }
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.BestForNavigation,
-        timeout: 10000,
       });
       const coords = `${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`;
       setGeoLocation(coords);
@@ -296,39 +296,52 @@ export default function SubmissionFormScreen() {
         farmerId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
 
-      // Prepare submission data for server
-      const submissionData = {
-        farmer_id: farmerId,
-        farmer_name: formData.farmer_name.trim(),
-        gender: formData.gender || null,
-        age: formData.age ? parseInt(formData.age) : null,
-        contact_number: formData.contact_number.trim(),
-        nin: formData.nin || null,
-        bvn: formData.bvn || null,
-        vin: formData.vin || null,
-        literacy_status: formData.literacy_status || null,
-        bank: formData.bank || null,
-        account_number: formData.account_number || null,
-        lga: formData.lga,
-        ward: formData.ward,
-        association: formData.association,
-        number_of_animals: parseInt(formData.number_of_animals),
-        membership_status: formData.membership_status || null,
-        executive_position: formData.executive_position || null,
-        geo_location: geoLocation || null,
-        farmer_image: farmerImage || null,
-        has_disease: formData.has_disease || null,
-        disease_name: formData.disease_name || null,
-        disease_description: formData.disease_description || null,
-        comments: formData.comments || null,
-        agent_serial_number: user?.agent_serial_number || null,
-        created_by: user?.email || "",
-      };
+        // Prepare submission data for server
+        const submissionData = {
+          farmer_id: farmerId,
+          farmer_name: formData.farmer_name.trim(),
+          gender: formData.gender || null,
+          age: formData.age ? parseInt(formData.age) : null,
+          contact_number: formData.contact_number.trim(),
+          nin: formData.nin || null,
+          bvn: formData.bvn || null,
+          vin: formData.vin || null,
+          literacy_status: formData.literacy_status || null,
+          bank: formData.bank || null,
+          account_number: formData.account_number || null,
+          lga: formData.lga,
+          ward: formData.ward,
+          association: formData.association,
+          number_of_animals: parseInt(formData.number_of_animals),
+          membership_status: formData.membership_status || null,
+          executive_position: formData.executive_position || null,
+          geo_location: geoLocation || null,
+          farmer_image: farmerImage || null,
+          send_image_as_base64: true, // Signal to backend to save file
+          has_disease: formData.has_disease || null,
+          disease_name: formData.disease_name || null,
+          disease_description: formData.disease_description || null,
+          comments: formData.comments || null,
+          agent_serial_number: user?.agent_serial_number || null,
+          created_by: user?.email || "",
+        };
 
       if (isOnline) {
+        // Convert image to base64 for upload if it's a local URI
+        let finalImage = farmerImage;
+        if (farmerImage && !farmerImage.startsWith('data:') && !farmerImage.startsWith('http')) {
+          try {
+            // Read image as base64 for submission
+            const base64 = await FileSystem.readAsStringAsync(farmerImage, { encoding: "base64" });
+            finalImage = `data:image/jpeg;base64,${base64}`;
+          } catch (e) {
+            console.error("Failed to read image for upload:", e);
+          }
+        }
+
         const response = await apiRequest("/submissions", { 
           method: "POST", 
-          body: submissionData 
+          body: { ...submissionData, farmer_image: finalImage } 
         });
         
         if (response.success) {
@@ -337,10 +350,8 @@ export default function SubmissionFormScreen() {
             ...submissionData,
             ...serverData,
             registration_id: serverData.registration_id || registrationId,
-            submission_status: "synced",
             created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
+          } as any);
           
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           resetForm();
@@ -349,13 +360,11 @@ export default function SubmissionFormScreen() {
           await storage.addPendingSubmission({
             ...submissionData,
             registration_id: registrationId,
-            submission_status: "pending",
             agent_id: user?.id || null,
             agent_name: user?.full_name || null,
             sync_error: response.error || "Unknown server error",
             created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
+          } as any);
           
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           resetForm();
@@ -365,12 +374,10 @@ export default function SubmissionFormScreen() {
         await storage.addPendingSubmission({
           ...submissionData,
           registration_id: registrationId,
-          submission_status: "pending",
           agent_id: user?.id || null,
           agent_name: user?.full_name || null,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+        } as any);
         
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         resetForm();
@@ -481,14 +488,13 @@ export default function SubmissionFormScreen() {
           onChangeText={(v) => updateField("farmer_name", v)}
           error={errors.farmer_name}
           autoCapitalize="words"
-          required
         />
 
         <FormPicker
           label="Gender"
           placeholder="Select gender"
           value={formData.gender}
-          options={["Male", "Female"]}
+          options={["Male", "Female", "Other"]}
           onChange={(v) => updateField("gender", v)}
         />
 
@@ -509,7 +515,6 @@ export default function SubmissionFormScreen() {
           error={errors.contact_number}
           keyboardType="phone-pad"
           maxLength={11}
-          required
         />
 
         <FormInput
@@ -582,7 +587,6 @@ export default function SubmissionFormScreen() {
             updateField("ward", "");
           }}
           error={errors.lga}
-          required
         />
 
         <FormPicker
@@ -593,14 +597,13 @@ export default function SubmissionFormScreen() {
           onChange={(v) => updateField("ward", v)}
           error={errors.ward}
           disabled={!formData.lga}
-          required
         />
 
         {previewFarmerId && (
           <View
             style={[
               styles.farmerIdContainer,
-              { backgroundColor: theme.backgroundElevated, borderColor: theme.primary },
+              { backgroundColor: theme.backgroundDefault, borderColor: theme.primary },
             ]}
           >
             <View style={styles.farmerIdHeader}>
@@ -652,10 +655,10 @@ export default function SubmissionFormScreen() {
           <Button
             onPress={getLocation}
             disabled={isGettingLocation}
-            style={[
-              styles.locationButton,
-              { backgroundColor: geoLocation ? theme.success : theme.primary }
-            ]}
+            style={
+              [styles.locationButton,
+              { backgroundColor: geoLocation ? theme.success : theme.primary }] as any
+            }
           >
             {isGettingLocation ? (
               <ActivityIndicator color="#fff" size="small" />
@@ -664,6 +667,31 @@ export default function SubmissionFormScreen() {
             )}
           </Button>
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Feather name="tag" size={18} color={theme.primary} />
+          <ThemedText style={styles.sectionTitle}>Association</ThemedText>
+        </View>
+
+        <FormPicker
+          label="Association *"
+          placeholder="Select association"
+          value={formData.association}
+          options={ASSOCIATIONS}
+          onChange={(v) => updateField("association", v)}
+          error={errors.association}
+        />
+
+        <FormInput
+          label="Number of Animals *"
+          placeholder="Total livestock count"
+          value={formData.number_of_animals}
+          onChangeText={(v) => updateField("number_of_animals", v)}
+          error={errors.number_of_animals}
+          keyboardType="number-pad"
+        />
       </View>
 
       <View style={styles.section}>

@@ -109,6 +109,20 @@ class SubmissionController extends Controller
                 'created_by' => 'nullable|string|max:255',
             ]);
 
+            // Handle base64 image for farmer_image
+            if ($request->has('farmer_image') && str_starts_with($request->farmer_image, 'data:image')) {
+                try {
+                    $imageData = $request->farmer_image;
+                    $format = strpos($imageData, 'data:image/png') !== false ? 'png' : 'jpg';
+                    $image = str_replace(['data:image/png;base64,', 'data:image/jpeg;base64,', ' '], ['', '', '+'], $imageData);
+                    $imageName = 'farmer_' . time() . '_' . uniqid() . '.' . $format;
+                    \Illuminate\Support\Facades\Storage::disk('public')->put('farmers/' . $imageName, base64_decode($image));
+                    $validated['farmer_image'] = 'farmers/' . $imageName;
+                } catch (\Exception $e) {
+                    // Silently skip if fails
+                }
+            }
+
             // Generate registration ID
             $validated['registration_id'] = LivestockSubmission::generateRegistrationId();
             $validated['agent_id'] = $request->user()->id;

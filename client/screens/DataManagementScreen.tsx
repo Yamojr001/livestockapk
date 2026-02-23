@@ -115,7 +115,7 @@ const DataManagementScreen = () => {
   const wards = filterLGA ? getWards(filterLGA) : [];
 
   const totalAnimals = filteredSubmissions.reduce(
-    (sum, s) => sum + (s.number_of_animals || 0),
+    (sum, s) => sum + (Number(s.number_of_animals) || 0),
     0
   );
 
@@ -136,11 +136,27 @@ const DataManagementScreen = () => {
 
   const getImageUrl = (imagePath: string | null | undefined) => {
     if (!imagePath) return null;
-    if (imagePath.startsWith("http") || imagePath.startsWith("data:") || imagePath.startsWith("file:")) {
+    
+    if (imagePath.startsWith("blob:")) {
+      const regId = selectedFarmer?.registration_id || selectedFarmer?.farmer_id;
+      if (regId) {
+        return `https://renthousehq.com/storage/farmers/${regId}.jpg`;
+      }
       return imagePath;
     }
-    const baseUrl = "https://livestock.jigawa.gov.ng";
-    return `${baseUrl}/storage/${imagePath}`;
+
+    if (
+      imagePath.startsWith("http") ||
+      imagePath.startsWith("data:") ||
+      imagePath.startsWith("file:")
+    ) {
+      return imagePath;
+    }
+    
+    if (imagePath.includes('/')) {
+        return `https://renthousehq.com/storage/${imagePath}`;
+    }
+    return `https://renthousehq.com/storage/farmers/${imagePath}`;
   };
 
   const FarmerDetailsModal = () => {
@@ -162,7 +178,7 @@ const DataManagementScreen = () => {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalBody}>
+            <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.detailPhotoContainer}>
                 {getImageUrl(selectedFarmer.farmer_image) ? (
                   <Image
@@ -508,6 +524,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     padding: Spacing.lg,
     maxHeight: "90%",
+    minHeight: 400, // Added minHeight to ensure content is visible
   },
   modalHeader: {
     flexDirection: "row",

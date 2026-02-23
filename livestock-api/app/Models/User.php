@@ -21,6 +21,8 @@ class User extends Authenticatable
         'assigned_lga',
         'assigned_ward',
         'user_image',
+        'age',
+        'gender',
         'last_sync',
         'agent_serial_number',
         'agent_ward_number',

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { ThemedText } from "@/components/ThemedText";
 import { UserCard } from "@/components/UserCard";
 import { EmptyState } from "@/components/EmptyState";
@@ -42,6 +43,7 @@ interface Section {
 const ROLES = [
   { value: "admin", label: "Admin" },
   { value: "agent", label: "Agent" },
+  { value: "ministry", label: "Ministry" },
 ];
 
 export default function UserManagementScreen() {
@@ -64,10 +66,13 @@ export default function UserManagementScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [role, setRole] = useState<"admin" | "agent">("agent");
+  const [role, setRole] = useState<"admin" | "agent" | "ministry">("agent");
   const [selectedLGA, setSelectedLGA] = useState("");
+  const [selectedWard, setSelectedWard] = useState("");
   const [showLGAPicker, setShowLGAPicker] = useState(false);
   const [userImage, setUserImage] = useState<string | null>(null);
+  const [age, setAge] = useState("");
+  const [gender, setGender] = useState<"male" | "female" | "">("");
 
   const lgaList = getLGAs();
 
@@ -155,6 +160,8 @@ export default function UserManagementScreen() {
     setRole("agent");
     setSelectedLGA("");
     setUserImage(null);
+    setAge("");
+    setGender("");
     setFormError("");
     setSuccessMessage("");
   };
@@ -183,6 +190,18 @@ export default function UserManagementScreen() {
     setIsSubmitting(true);
 
     try {
+      // Convert image to base64 for upload if it's a local URI
+      let finalImage = userImage;
+      if (userImage && !userImage.startsWith('data:') && !userImage.startsWith('http')) {
+        try {
+          // Read image as base64 for submission
+          const base64 = await FileSystem.readAsStringAsync(userImage, { encoding: "base64" });
+          finalImage = `data:image/jpeg;base64,${base64}`;
+        } catch (e) {
+          console.error("Failed to read user image for upload:", e);
+        }
+      }
+
       const response = await apiRequest(
         "/users",
         {
@@ -194,9 +213,13 @@ export default function UserManagementScreen() {
             password_confirmation: password,
             phone_number: phoneNumber.trim() || null,
             user_role: role,
-            assigned_lga: role === "agent" ? selectedLGA : null,
-            user_image: userImage || null,
+            assigned_lga: (role === "agent" || role === "ministry") ? selectedLGA : null,
+            assigned_ward: (role === "agent" || role === "ministry") ? selectedWard : null,
+            user_image: finalImage || null,
+            age: age ? parseInt(age) : null,
+            gender: gender || null,
             status: "active",
+            send_as_base64: true // Tell backend to process base64 to file
           },
         }
       );
@@ -249,6 +272,10 @@ export default function UserManagementScreen() {
 
   const sections: Section[] = [
     {
+      title: "Ministry",
+      data: filteredUsers.filter((u) => u.user_role === "ministry"),
+    },
+    {
       title: "Admins",
       data: filteredUsers.filter((u) => u.user_role === "admin"),
     },
@@ -264,6 +291,7 @@ export default function UserManagementScreen() {
 
   const adminCount = users.filter((u) => u.user_role === "admin").length;
   const agentCount = users.filter((u) => u.user_role === "agent").length;
+  const ministryCount = users.filter((u) => u.user_role === "ministry").length;
   const activeCount = users.filter((u) => u.status === "active").length;
 
   const renderItem = useCallback(
@@ -327,6 +355,14 @@ export default function UserManagementScreen() {
             </ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
               Admins
+            </ThemedText>
+          </View>
+          <View style={[styles.statItem, { backgroundColor: theme.backgroundDefault }]}>
+            <ThemedText style={[styles.statValue, { color: "#6366f1" }]}>
+              {ministryCount}
+            </ThemedText>
+            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+              Ministry
             </ThemedText>
           </View>
           <View style={[styles.statItem, { backgroundColor: theme.backgroundDefault }]}>
@@ -442,60 +478,60 @@ export default function UserManagementScreen() {
                 </View>
               ) : null}
 
-              <FormInput
-                label="Full Name"
-                placeholder="Enter full name"
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-                leftIcon="user"
-              />
+        <FormInput
+          label="Full Name"
+          placeholder="Enter full name"
+          value={fullName}
+          onChangeText={setFullName}
+          autoCapitalize="words"
+          leftIcon="user"
+        />
 
-              <View style={[styles.imageSection, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-                <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary, marginBottom: 12 }]}>
-                  Profile Photo
-                </ThemedText>
-                <View style={styles.photoPreviewContainer}>
-                  {userImage ? (
-                    <>
-                      <Image
-                        source={{ uri: userImage }}
-                        style={styles.photoPreview}
-                      />
-                      <Pressable
-                        style={[styles.removePhotoButton, { backgroundColor: "#ef4444" }]}
-                        onPress={() => setUserImage(null)}
-                      >
-                        <Feather name="x" size={16} color="#fff" />
-                      </Pressable>
-                    </>
-                  ) : (
-                    <View style={[styles.photoPlaceholder, { backgroundColor: theme.border }]}>
-                      <Feather name="camera" size={32} color={theme.textSecondary} />
-                    </View>
-                  )}
-                </View>
-                <View style={styles.photoActions}>
-                  <Pressable
-                    style={[styles.photoActionButton, { backgroundColor: theme.primary }]}
-                    onPress={takeUserPhoto}
-                  >
-                    <Feather name="camera" size={16} color="#fff" />
-                    <ThemedText style={[styles.photoActionText, { color: "#fff" }]}>
-                      Take Photo
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.photoActionButton, { backgroundColor: theme.primary }]}
-                    onPress={pickUserImage}
-                  >
-                    <Feather name="image" size={16} color="#fff" />
-                    <ThemedText style={[styles.photoActionText, { color: "#fff" }]}>
-                      Upload
-                    </ThemedText>
-                  </Pressable>
-                </View>
+        <View style={[styles.imageSection, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary, marginBottom: 12 }]}>
+            Profile Photo
+          </ThemedText>
+          <View style={styles.photoPreviewContainer}>
+            {userImage ? (
+              <>
+                <Image
+                  source={{ uri: userImage }}
+                  style={styles.photoPreview}
+                />
+                <Pressable
+                  style={[styles.removePhotoButton, { backgroundColor: "#ef4444" }]}
+                  onPress={() => setUserImage(null)}
+                >
+                  <Feather name="x" size={16} color="#fff" />
+                </Pressable>
+              </>
+            ) : (
+              <View style={[styles.photoPlaceholder, { backgroundColor: theme.border }]}>
+                <Feather name="camera" size={32} color={theme.textSecondary} />
               </View>
+            )}
+          </View>
+          <View style={styles.photoActions}>
+            <Pressable
+              style={[styles.photoActionButton, { backgroundColor: theme.primary }]}
+              onPress={takeUserPhoto}
+            >
+              <Feather name="camera" size={16} color="#fff" />
+              <ThemedText style={[styles.photoActionText, { color: "#fff" }]}>
+                Take Photo
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.photoActionButton, { backgroundColor: theme.primary }]}
+              onPress={pickUserImage}
+            >
+              <Feather name="image" size={16} color="#fff" />
+              <ThemedText style={[styles.photoActionText, { color: "#fff" }]}>
+                Upload
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
 
               <FormInput
                 label="Email Address"
@@ -526,6 +562,50 @@ export default function UserManagementScreen() {
                 leftIcon="phone"
               />
 
+              <View style={styles.filterRow}>
+                <View style={{ flex: 1 }}>
+                  <FormInput
+                    label="Age"
+                    placeholder="Enter age"
+                    value={age}
+                    onChangeText={setAge}
+                    keyboardType="number-pad"
+                    leftIcon="calendar"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+                    Gender
+                  </ThemedText>
+                  <View style={styles.genderButtons}>
+                    <Pressable
+                      style={[
+                        styles.genderButton,
+                        {
+                          backgroundColor: gender === "male" ? theme.primaryLight : theme.backgroundDefault,
+                          borderColor: gender === "male" ? theme.primary : theme.border,
+                        },
+                      ]}
+                      onPress={() => setGender("male")}
+                    >
+                      <ThemedText style={{ color: gender === "male" ? theme.primary : theme.text }}>Male</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.genderButton,
+                        {
+                          backgroundColor: gender === "female" ? theme.primaryLight : theme.backgroundDefault,
+                          borderColor: gender === "female" ? theme.primary : theme.border,
+                        },
+                      ]}
+                      onPress={() => setGender("female")}
+                    >
+                      <ThemedText style={{ color: gender === "female" ? theme.primary : theme.text }}>Female</ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+
               <View style={styles.fieldGroup}>
                 <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>
                   User Role
@@ -543,12 +623,12 @@ export default function UserManagementScreen() {
                         },
                       ]}
                       onPress={() => {
-                        setRole(r.value as "admin" | "agent");
+                        setRole(r.value as "admin" | "agent" | "ministry");
                         Haptics.selectionAsync();
                       }}
                     >
                       <Feather
-                        name={r.value === "admin" ? "shield" : "user"}
+                        name={r.value === "admin" ? "shield" : r.value === "ministry" ? "briefcase" : "user"}
                         size={18}
                         color={role === r.value ? "#fff" : theme.text}
                       />
@@ -842,21 +922,41 @@ const styles = StyleSheet.create({
   },
   roleButtons: {
     flexDirection: "row",
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    flexWrap: "wrap",
   },
   roleButton: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing.sm,
     paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
+    minWidth: "30%",
   },
   roleButtonText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  genderButtons: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  genderButton: {
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
   },
   pickerButton: {
     flexDirection: "row",

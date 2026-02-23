@@ -15,13 +15,34 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6|confirmed',
             'phone_number' => 'nullable|string|max:20',
+            'user_image' => 'nullable|string',
+            'age' => 'nullable|integer',
+            'gender' => 'nullable|string|max:20',
         ]);
+
+        // Handle base64 image if present
+        $userImagePath = null;
+        if ($request->has('user_image') && str_starts_with($request->user_image, 'data:image')) {
+            try {
+                $imageData = $request->user_image;
+                $format = strpos($imageData, 'data:image/png') !== false ? 'png' : 'jpg';
+                $image = str_replace(['data:image/png;base64,', 'data:image/jpeg;base64,', ' '], ['', '', '+'], $imageData);
+                $imageName = 'user_' . time() . '_' . uniqid() . '.' . $format;
+                \Illuminate\Support\Facades\Storage::disk('public')->put('users/' . $imageName, base64_decode($image));
+                $userImagePath = 'users/' . $imageName;
+            } catch (\Exception $e) {
+                // Fallback to null
+            }
+        }
 
         $user = User::create([
             'full_name' => $validated['full_name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'phone_number' => $validated['phone_number'] ?? null,
+            'user_image' => $userImagePath,
+            'age' => $validated['age'] ?? null,
+            'gender' => $validated['gender'] ?? null,
             'user_role' => 'agent',
             'status' => 'active',
         ]);
@@ -102,7 +123,21 @@ class AuthController extends Controller
         $validated = $request->validate([
             'full_name' => 'sometimes|string|max:255',
             'phone_number' => 'nullable|string|max:20',
+            'user_image' => 'nullable|string',
         ]);
+
+        if ($request->has('user_image') && str_starts_with($request->user_image, 'data:image')) {
+            try {
+                $imageData = $request->user_image;
+                $format = strpos($imageData, 'data:image/png') !== false ? 'png' : 'jpg';
+                $image = str_replace(['data:image/png;base64,', 'data:image/jpeg;base64,', ' '], ['', '', '+'], $imageData);
+                $imageName = 'user_' . time() . '_' . uniqid() . '.' . $format;
+                \Illuminate\Support\Facades\Storage::disk('public')->put('users/' . $imageName, base64_decode($image));
+                $validated['user_image'] = 'users/' . $imageName;
+            } catch (\Exception $e) {
+                // Skip if fails
+            }
+        }
 
         $request->user()->update($validated);
 
