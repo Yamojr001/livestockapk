@@ -12,6 +12,7 @@ import {
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { FormPicker } from "@/components/FormPicker";
+import { imageCacheService } from "@/lib/image-cache-service";
 import { getLGAs, getWards } from "@/data/lgaWardData";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -134,32 +135,55 @@ const DataManagementScreen = () => {
     []
   );
 
-  const getImageUrl = (imagePath: string | null | undefined) => {
+  const getImageUrl = async (imagePath: string | null | undefined) => {
     if (!imagePath) return null;
     
-    if (imagePath.startsWith("blob:")) {
-      const regId = selectedFarmer?.registration_id || selectedFarmer?.farmer_id;
-      if (regId) {
-        return `https://renthousehq.com/storage/farmers/${regId}.jpg`;
+    // Local file system paths - use directly
+    if (imagePath.startsWith("file:") || imagePath.startsWith("data:")) {
+      return imagePath;
+    }
+
+    // Cached files - use directly
+    if (imagePath.includes(FileSystem.documentDirectory || '')) {
+      return imagePath;
+    }
+
+    // Already full URLs from backend (with http/https)
+    if (imagePath.startsWith("http")) {
+      try {
+        // Try to cache the remote URL for offline access
+        const cached = await imageCacheService.getCachedImage(imagePath);
+        return cached || imagePath;
+      } catch (e) {
+        // Fallback to URL if caching fails
+        return imagePath;
+      }
+    }
+
+    // Relative paths - shouldn't happen now, but construct URL if needed
+    if (imagePath.includes('/')) {
+      // Try as-is first (could be /storage/farmers/... format)
+      if (imagePath.startsWith('/')) {
+        return `${imagePath}`;
       }
       return imagePath;
     }
-
-    if (
-      imagePath.startsWith("http") ||
-      imagePath.startsWith("data:") ||
-      imagePath.startsWith("file:")
-    ) {
-      return imagePath;
-    }
     
-    if (imagePath.includes('/')) {
-        return `https://renthousehq.com/storage/${imagePath}`;
-    }
-    return `https://renthousehq.com/storage/farmers/${imagePath}`;
+    // Shouldn't reach here, but fallback
+    return imagePath;
   };
 
   const FarmerDetailsModal = () => {
+    const [imageUri, setImageUri] = useState<string | null>(null);
+
+    useEffect(() => {
+      if (selectedFarmer?.farmer_image) {
+        getImageUrl(selectedFarmer.farmer_image).then(setImageUri);
+      } else {
+        setImageUri(null);
+      }
+    }, [selectedFarmer]);
+
     if (!selectedFarmer) return null;
 
     return (
@@ -180,9 +204,9 @@ const DataManagementScreen = () => {
 
             <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.detailPhotoContainer}>
-                {getImageUrl(selectedFarmer.farmer_image) ? (
+                {imageUri ? (
                   <Image
-                    source={{ uri: getImageUrl(selectedFarmer.farmer_image)! }}
+                    source={{ uri: imageUri }}
                     style={styles.detailPhoto}
                     resizeMode="cover"
                   />

@@ -1,5 +1,6 @@
 import { storage } from "@/lib/storage";
 import { apiRequest } from "@/lib/api-config";
+import { imageCacheService } from "@/lib/image-cache-service";
 
 export interface SyncResult {
   success: boolean;
@@ -86,8 +87,8 @@ export class SyncService {
           progress.currentSubmission = submission.registration_id;
           this.notifyProgress(progress);
 
-          // Prepare data for API (exclude local fields)
-          const apiData = this.prepareApiData(submission);
+          // Prepare data for API (exclude local fields and convert images)
+          const apiData = await this.prepareApiData(submission);
 
           // Send to server
           const response = await apiRequest("/submissions", {
@@ -205,7 +206,9 @@ export class SyncService {
       }
 
       // Prepare batch data
-      const batchData = pendingSubmissions.map(sub => this.prepareApiData(sub));
+      const batchData = await Promise.all(
+        pendingSubmissions.map(sub => this.prepareApiData(sub))
+      );
 
       // Send batch to server
       const response = await apiRequest("/submissions/sync", {
@@ -415,7 +418,7 @@ export class SyncService {
   }
 
   // Prepare submission data for API
-  private prepareApiData(submission: any): any {
+  private async prepareApiData(submission: any): Promise<any> {
     // Remove local-only fields
     const { 
       id, 
@@ -425,6 +428,18 @@ export class SyncService {
       updated_at,
       ...apiData 
     } = submission;
+
+    // No base64 conversion. Drop local-only paths during sync.
+    if (apiData.farmer_image) {
+      const imagePath = apiData.farmer_image as string;
+
+      if (
+        imagePath.startsWith("file:") ||
+        imagePath.startsWith("content://")
+      ) {
+        delete apiData.farmer_image;
+      }
+    }
 
     return apiData;
   }

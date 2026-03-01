@@ -49,10 +49,32 @@ export default function AgentIDCardScreen() {
     useState<LivestockSubmission | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [imageUri, setImageUri] = useState<string | null>(null);
 
   useEffect(() => {
     loadSubmissions();
   }, []);
+
+  // Update image URI when selected submission changes
+  useEffect(() => {
+    if (selectedSubmission?.farmer_image) {
+      // Handle both full URLs and local paths
+      const imagePath = selectedSubmission.farmer_image;
+      
+      // If it's already a full URL (http/https) or local file, use it directly
+      if (imagePath.startsWith('http') || imagePath.startsWith('file:')) {
+        setImageUri(imagePath);
+      } else if (imagePath.startsWith('/')) {
+        // Relative path from storage
+        setImageUri(imagePath);
+      } else {
+        // Fallback for other cases
+        setImageUri(imagePath);
+      }
+    } else {
+      setImageUri(null);
+    }
+  }, [selectedSubmission]);
 
   const loadSubmissions = async () => {
     setIsLoading(true);
@@ -225,8 +247,9 @@ export default function AgentIDCardScreen() {
   );
 
   const getQRValue = () => {
+    // QR code should contain just the registration ID for identification
     const regId = selectedSubmission?.registration_id || selectedSubmission?.farmer_id || "";
-    return `https://livestock.jigawa.gov.ng/verify/${regId}`;
+    return regId;
   };
 
   const getLocation = () => {
@@ -307,11 +330,15 @@ export default function AgentIDCardScreen() {
 
             <View style={styles.cardBody}>
               <View style={styles.photoSection}>
-                {selectedSubmission.farmer_image ? (
+                {imageUri ? (
                   <Image
-                    source={{ uri: selectedSubmission.farmer_image }}
+                    source={{ uri: imageUri }}
                     style={styles.farmerPhoto}
                     resizeMode="cover"
+                    onError={(error) => {
+                      console.log("Image load error:", error.nativeEvent.error);
+                      setImageUri(null);
+                    }}
                   />
                 ) : (
                   <View style={styles.photoPlaceholder}>

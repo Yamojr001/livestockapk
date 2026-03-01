@@ -18,7 +18,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { FormInput } from "@/components/FormInput";
@@ -30,6 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { storage } from "@/lib/storage";
 import { apiRequest } from "@/lib/api-config";
+import { imageCacheService } from "@/lib/image-cache-service";
 import { getLGAs, getWards, ASSOCIATIONS, BANKS } from "@/data/lgaWardData";
 import { generateFarmerId } from "@/lib/farmer-id-generator";
 import { BorderRadius, Spacing } from "@/constants/theme";
@@ -317,7 +317,6 @@ export default function SubmissionFormScreen() {
           executive_position: formData.executive_position || null,
           geo_location: geoLocation || null,
           farmer_image: farmerImage || null,
-          send_image_as_base64: true, // Signal to backend to save file
           has_disease: formData.has_disease || null,
           disease_name: formData.disease_name || null,
           disease_description: formData.disease_description || null,
@@ -327,52 +326,58 @@ export default function SubmissionFormScreen() {
         };
 
       if (isOnline) {
-        // Convert image to base64 for upload if it's a local URI
-        let finalImage = farmerImage;
-        if (farmerImage && !farmerImage.startsWith('data:') && !farmerImage.startsWith('http')) {
-          try {
-            // Read image as base64 for submission
-            const base64 = await FileSystem.readAsStringAsync(farmerImage, { encoding: "base64" });
-            finalImage = `data:image/jpeg;base64,${base64}`;
-          } catch (e) {
-            console.error("Failed to read image for upload:", e);
-          }
-        }
-
-        const response = await apiRequest("/submissions", { 
-          method: "POST", 
-          body: { ...submissionData, farmer_image: finalImage } 
+        // Send image URI as-is (including blob)
+        const cachedImagePath: string | null = null;
+        const response = await apiRequest("/submissions", {
+          method: "POST",
+          body: { ...submissionData, farmer_image: farmerImage || null },
         });
         
         if (response.success) {
           const serverData = response.data;
-          await storage.addSubmission({
+          // Use server image path for online storage
+          const submissionWithImage = {
             ...submissionData,
             ...serverData,
             registration_id: serverData.registration_id || registrationId,
+            farmer_image: serverData.farmer_image || cachedImagePath || farmerImage,
             created_at: new Date().toISOString(),
-          } as any);
+          };
+          
+          // Cache the server image URL for offline use
+          if (serverData.farmer_image && serverData.farmer_image.startsWith('http')) {
+            await imageCacheService.cacheImageFromUrl(serverData.farmer_image);
+          }
+          
+          await storage.addSubmission(submissionWithImage as any);
           
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           resetForm();
           setShowSuccess(true);
         } else {
+          // Save pending with cached image if available
           await storage.addPendingSubmission({
             ...submissionData,
+            farmer_image: cachedImagePath || farmerImage,
             registration_id: registrationId,
             agent_id: user?.id || null,
             agent_name: user?.full_name || null,
             sync_error: response.error || "Unknown server error",
             created_at: new Date().toISOString(),
           } as any);
-          
+
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Alert.alert("Submission Failed", response.error || "Could not submit to server. Saved offline.");
           resetForm();
           setShowSuccess(true);
         }
       } else {
+        // Offline: save pending submission with the original image URI
+        const cachedImagePath = farmerImage || null;
+        
         await storage.addPendingSubmission({
           ...submissionData,
+          farmer_image: cachedImagePath,
           registration_id: registrationId,
           agent_id: user?.id || null,
           agent_name: user?.full_name || null,

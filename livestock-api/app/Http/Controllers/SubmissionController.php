@@ -80,7 +80,7 @@ class SubmissionController extends Controller
                 'user_name' => $request->user()->full_name,
             ]);
 
-            $validated = $request->validate([
+            $rules = [
                 'farmer_id' => 'nullable|string|max:50',
                 'farmer_name' => 'required|string|max:255',
                 'gender' => 'nullable|string|in:Male,Female,Other',
@@ -99,7 +99,7 @@ class SubmissionController extends Controller
                 'membership_status' => 'nullable|string|max:100',
                 'executive_position' => 'nullable|string|max:100',
                 'geo_location' => 'nullable|string|max:255',
-                'farmer_image' => 'nullable|string',
+                'farmer_image' => 'nullable',
                 'has_disease' => 'nullable|string|max:10',
                 'disease_name' => 'nullable|string|max:255',
                 'disease_description' => 'nullable|string',
@@ -107,20 +107,15 @@ class SubmissionController extends Controller
                 'agent_serial_number' => 'nullable|integer',
                 'submission_status' => 'nullable|string|in:pending,synced,failed',
                 'created_by' => 'nullable|string|max:255',
-            ]);
+            ];
 
-            // Handle base64 image for farmer_image
-            if ($request->has('farmer_image') && str_starts_with($request->farmer_image, 'data:image')) {
-                try {
-                    $imageData = $request->farmer_image;
-                    $format = strpos($imageData, 'data:image/png') !== false ? 'png' : 'jpg';
-                    $image = str_replace(['data:image/png;base64,', 'data:image/jpeg;base64,', ' '], ['', '', '+'], $imageData);
-                    $imageName = 'farmer_' . time() . '_' . uniqid() . '.' . $format;
-                    \Illuminate\Support\Facades\Storage::disk('public')->put('farmers/' . $imageName, base64_decode($image));
-                    $validated['farmer_image'] = 'farmers/' . $imageName;
-                } catch (\Exception $e) {
-                    // Silently skip if fails
-                }
+            $rules['farmer_image'] = 'nullable|string';
+
+            $validated = $request->validate($rules);
+
+            // Store farmer_image as provided (including blob URLs)
+            if ($request->filled('farmer_image')) {
+                $validated['farmer_image'] = $request->farmer_image;
             }
 
             // Generate registration ID
@@ -172,7 +167,6 @@ class SubmissionController extends Controller
             Log::error('Failed to create submission', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'input' => $request->except(['farmer_image']), // Exclude base64 image from logs
             ]);
             
             return response()->json([
@@ -404,7 +398,7 @@ class SubmissionController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching stats', [
+            Log::error('Failed to fetch statistics', [
                 'error' => $e->getMessage(),
             ]);
             

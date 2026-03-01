@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_URL_KEY = "@livestock_api_url";
 const AUTH_TOKEN_KEY = "@livestock_auth_token";
 
-const DEFAULT_API_URL = "http://127.0.0.1:8000/api/v1";
+const DEFAULT_API_URL = "https://livestock.northdemy.com/api/v1";
 
 export async function getApiBaseUrl() {
   try {
@@ -45,9 +45,13 @@ export async function apiRequest(endpoint, options = {}) {
     const baseUrl = await getApiBaseUrl();
     const url = `${baseUrl}${endpoint}`;
 
+    const isFormData =
+      (typeof FormData !== "undefined" && body instanceof FormData) ||
+      (body && typeof body === "object" && "_parts" in body);
+
     const headers = {
-      "Content-Type": "application/json",
       Accept: "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
     };
 
     if (requiresAuth) {
@@ -59,18 +63,29 @@ export async function apiRequest(endpoint, options = {}) {
 
     console.log(`API Request: ${method} ${url}`, {
       headers,
-      body: body
-        ? body.farmer_name
-          ? { ...body, farmer_image: body.farmer_image ? "[IMAGE_URI]" : null }
-          : body
-        : null,
+      body: isFormData
+        ? "[FORM_DATA]"
+        : body
+          ? body.farmer_name
+            ? { ...body, farmer_image: body.farmer_image ? "[IMAGE_URI]" : null }
+            : body
+          : null,
     });
 
-    const response = await fetch(url, {
+    const requestPromise = fetch(url, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
     });
+
+    const timeoutPromise = new Promise((_, reject) => {
+      const id = setTimeout(() => {
+        clearTimeout(id);
+        reject(new Error("Request timed out"));
+      }, 20000);
+    });
+
+    const response = await Promise.race([requestPromise, timeoutPromise]);
 
     // Parse response
     let responseData = null;
@@ -139,6 +154,10 @@ export async function apiRequest(endpoint, options = {}) {
     console.error("API Request Error:", error);
 
     let errorMessage = error.message || "Network error";
+
+    if (errorMessage === "Request timed out") {
+      errorMessage = "Request timed out. Please try again.";
+    }
 
     // Provide more helpful error messages
     if (
