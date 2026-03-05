@@ -51,7 +51,7 @@ export default function AgentIDCardScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [baseUrl, setBaseUrl] = useState<string>("http://127.0.0.1:8000");
+  const [baseUrl, setBaseUrl] = useState<string>("https://livestock.northdemy.com");
 
   useEffect(() => {
     loadSubmissions();
@@ -67,7 +67,7 @@ export default function AgentIDCardScreen() {
     } catch (error) {
       console.error("Error getting base URL:", error);
       // Use default if error
-      setBaseUrl("http://127.0.0.1:8000");
+      setBaseUrl("https://livestock.northdemy.com");
     }
   };
 

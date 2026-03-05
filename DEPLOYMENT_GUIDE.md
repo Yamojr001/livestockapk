@@ -103,8 +103,8 @@ npm run expo:dev
 ### .env (Laravel)
 ```ini
 FILESYSTEM_DISK=public
-APP_URL=http://127.0.0.1:8000
-STORAGE_URL=http://127.0.0.1:8000/storage
+APP_URL=livestock.northdemy.com
+STORAGE_URL=livestock.northdemy.com/storage
 ```
 
 ### .env (Expo)
@@ -128,7 +128,7 @@ ls -la livestock-api/storage/app/public/farmers/
 ls -la livestock-api/public/storage
 
 # Test image serving
-curl -I http://127.0.0.1:8000/storage/farmers/
+curl -I livestock.northdemy.com/storage/farmers/
 ```
 
 ### Check Frontend

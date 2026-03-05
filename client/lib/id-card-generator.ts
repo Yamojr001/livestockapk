@@ -179,7 +179,7 @@ const generateUserIDCardHTML = (data: UserIDCardData): string => {
   `;
 };
 
-const generateFarmerIDCardHTML = (data: FarmerIDCardData, baseUrl: string = "http://127.0.0.1:8000"): string => {
+const generateFarmerIDCardHTML = (data: FarmerIDCardData, baseUrl: string = "livestock.northdemy.com"): string => {
   const finalImageUrl = data.imageUrl && data.imageUrl.startsWith("storage/") 
     ? `${baseUrl}/${data.imageUrl}` 
     : data.imageUrl;

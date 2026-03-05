@@ -7,7 +7,7 @@ echo ""
 
 # Get auth token
 echo "1. Getting auth token..."
-TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
+TOKEN=$(curl -s -X POST livestock.northdemy.com/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"a@gmail.com","password":"admin123"}' | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
 
@@ -21,7 +21,7 @@ echo ""
 
 # Test 1: Create submission WITHOUT image
 echo "2. Testing submission WITHOUT image..."
-RESPONSE=$(curl -s -X POST http://127.0.0.1:8000/api/v1/submissions \
+RESPONSE=$(curl -s -X POST livestock.northdemy.com/api/v1/submissions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

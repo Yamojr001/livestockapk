@@ -41,7 +41,7 @@ php artisan storage:link
 ```bash
 cd livestock-api
 php artisan serve
-# Should show: Laravel development server started on http://127.0.0.1:8000
+# Should show: Laravel development server started on livestock.northdemy.com
 ```
 
 ### 6. In Another Terminal - Start Frontend

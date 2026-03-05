@@ -49,7 +49,7 @@ export default function IDCardScreen() {
     useState<LivestockSubmission | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [baseUrl, setBaseUrl] = useState<string>("http://127.0.0.1:8000");
+  const [baseUrl, setBaseUrl] = useState<string>("https://livestock.northdemy.com");
 
   useEffect(() => {
     loadSubmissions();
@@ -65,7 +65,7 @@ export default function IDCardScreen() {
     } catch (error) {
       console.error("Error getting base URL:", error);
       // Use default if error
-      setBaseUrl("http://127.0.0.1:8000");
+      setBaseUrl("https://livestock.northdemy.com");
     }
   };
 
@@ -115,14 +115,14 @@ export default function IDCardScreen() {
 
   const filteredSubmissions = searchTerm
     ? combinedSearchPool.filter((sub) => {
-        const q = searchTerm.toLowerCase();
-        return (
-          (!!sub.registration_id &&
-            sub.registration_id.toLowerCase().includes(q)) ||
-          (!!sub.farmer_name && sub.farmer_name.toLowerCase().includes(q)) ||
-          (!!sub.contact_number && sub.contact_number.includes(searchTerm))
-        );
-      })
+      const q = searchTerm.toLowerCase();
+      return (
+        (!!sub.registration_id &&
+          sub.registration_id.toLowerCase().includes(q)) ||
+        (!!sub.farmer_name && sub.farmer_name.toLowerCase().includes(q)) ||
+        (!!sub.contact_number && sub.contact_number.includes(searchTerm))
+      );
+    })
     : [];
 
   const handleSaveCard = async () => {
@@ -172,9 +172,8 @@ export default function IDCardScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: "image/png",
-          dialogTitle: `ID Card - ${
-            selectedSubmission.registration_id || selectedSubmission.farmer_name
-          }`,
+          dialogTitle: `ID Card - ${selectedSubmission.registration_id || selectedSubmission.farmer_name
+            }`,
         });
       } else {
         Alert.alert("Sharing not available", "Sharing is not available on this device.");
@@ -248,7 +247,7 @@ export default function IDCardScreen() {
 
   const getImageUrl = (imagePath: string | null | undefined) => {
     if (!imagePath) return null;
-    
+
     // If it's a blob URL, we should prefer the Laravel storage version
     if (imagePath.startsWith("blob:")) {
       const regId = selectedSubmission?.registration_id || selectedSubmission?.farmer_id;
@@ -271,9 +270,9 @@ export default function IDCardScreen() {
 
     // Laravel storage path handling
     if (imagePath.includes('/')) {
-        return `${baseUrl}/storage/${imagePath}`;
+      return `${baseUrl}/storage/${imagePath}`;
     }
-    
+
     const sub = selectedSubmission as any;
     const folder = sub?._isUser ? 'users' : 'farmers';
     return `${baseUrl}/storage/${folder}/${imagePath}`;

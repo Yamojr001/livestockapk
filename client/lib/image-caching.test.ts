@@ -197,7 +197,7 @@ export const imageCachingTests = {
   async testLaravelStorageSetup(): Promise<boolean> {
     try {
       // This test assumes Laravel is running
-      const response = await fetch("http://127.0.0.1:8000/storage/farmers/", {
+      const response = await fetch("livestock.northdemy.com/storage/farmers/", {
         method: "HEAD",
       });
 

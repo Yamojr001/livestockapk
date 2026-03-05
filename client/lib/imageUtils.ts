@@ -27,7 +27,7 @@ export function getFarmerImageUrl(farmer: any): string | null {
         if (farmer.farmer_image.startsWith('storage/')) {
             // Use localhost for local development
             // In production, this should use the actual API URL
-            return `http://127.0.0.1:8000/${farmer.farmer_image}`;
+            return `livestock.northdemy.com/${farmer.farmer_image}`;
         }
     }
     
