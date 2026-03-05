@@ -1,0 +1,208 @@
+{
+  "info": {
+    "name": "Livestock API - Image Upload Tests",
+    "description": "Test collection for farmer image upload fix",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    if (response.access_token) {",
+              "        pm.environment.set('auth_token', response.access_token);",
+              "        pm.environment.set('user_id', response.user.id);",
+              "        console.log('✅ Token saved:', response.access_token.substring(0, 20) + '...');",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"a@gmail.com\",\n  \"password\": \"password\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/api/v1/auth/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "v1", "auth", "login"]
+        },
+        "description": "Login to get authentication token"
+      }
+    },
+    {
+      "name": "2. Create Submission WITHOUT Image",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('farmer_image is null', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.data.farmer_image).to.be.null;",
+              "    console.log('✅ farmer_image is NULL (correct)');",
+              "});",
+              "",
+              "pm.test('farmer_image_url is null', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.data.farmer_image_url).to.be.null;",
+              "    console.log('✅ farmer_image_url is NULL (correct)');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"farmer_name\": \"Test Farmer No Image\",\n  \"contact_number\": \"09012345678\",\n  \"lga\": \"Auyo\",\n  \"ward\": \"Auyo\",\n  \"association\": \"Cattle Breeders Association of Nigeria (CBAN)\",\n  \"number_of_animals\": 10,\n  \"gender\": \"Male\",\n  \"age\": 35\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/api/v1/submissions",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "v1", "submissions"]
+        },
+        "description": "Create submission without image - should have NULL values"
+      }
+    },
+    {
+      "name": "3. Get All Submissions",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Check farmer_image format', function () {",
+              "    const response = pm.response.json();",
+              "    const submissions = response.data.data;",
+              "    ",
+              "    submissions.forEach((sub, index) => {",
+              "        console.log(`Submission ${sub.id}: ${sub.farmer_name}`);",
+              "        ",
+              "        if (sub.farmer_image === null) {",
+              "            console.log('  ✅ farmer_image: NULL (correct)');",
+              "            pm.expect(sub.farmer_image_url).to.be.null;",
+              "            console.log('  ✅ farmer_image_url: NULL (correct)');",
+              "        } else {",
+              "            console.log('  farmer_image:', sub.farmer_image);",
+              "            pm.expect(sub.farmer_image).to.match(/^storage\\/farmers\\//);",
+              "            console.log('  ✅ farmer_image starts with storage/farmers/ (correct)');",
+              "            ",
+              "            console.log('  farmer_image_url:', sub.farmer_image_url);",
+              "            pm.expect(sub.farmer_image_url).to.match(/^http.*storage\\/farmers\\//);",
+              "            console.log('  ✅ farmer_image_url is full URL (correct)');",
+              "        }",
+              "        ",
+              "        // Check for invalid values",
+              "        pm.expect(sub.farmer_image).to.not.equal('NULL');",
+              "        pm.expect(sub.farmer_image).to.not.equal('[object Object]');",
+              "        pm.expect(sub.farmer_image).to.not.equal('');",
+              "        console.log('  ✅ No invalid values found');",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/api/v1/submissions",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "v1", "submissions"]
+        },
+        "description": "Verify all submissions have correct farmer_image format"
+      }
+    },
+    {
+      "name": "4. Check Single Submission",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('farmer_image format is correct', function () {",
+              "    const response = pm.response.json();",
+              "    const sub = response.data;",
+              "    ",
+              "    if (sub.farmer_image === null) {",
+              "        console.log('✅ farmer_image is NULL');",
+              "        pm.expect(sub.farmer_image_url).to.be.null;",
+              "        console.log('✅ farmer_image_url is NULL');",
+              "    } else {",
+              "        pm.expect(sub.farmer_image).to.match(/^storage\\/farmers\\//);",
+              "        console.log('✅ farmer_image format:', sub.farmer_image);",
+              "        ",
+              "        pm.expect(sub.farmer_image_url).to.match(/^http.*storage\\/farmers\\//);",
+              "        console.log('✅ farmer_image_url format:', sub.farmer_image_url);",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/api/v1/submissions/8",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "v1", "submissions", "8"]
+        },
+        "description": "Check a specific submission (change ID as needed)"
+      }
+    }
+  ]
+}

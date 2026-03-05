@@ -50,6 +50,28 @@ class LivestockSubmission extends Model
         'updated_at' => 'datetime',
     ];
 
+    protected $appends = ['farmer_image_url'];
+
+    /**
+     * Get the full URL for the farmer image
+     * Converts storage/farmers/image.jpg to full URL
+     * Returns null if no image exists
+     */
+    public function getFarmerImageUrlAttribute(): ?string
+    {
+        if (empty($this->farmer_image)) {
+            return null;
+        }
+
+        // If already a full URL, return as is
+        if (str_starts_with($this->farmer_image, 'http://') || str_starts_with($this->farmer_image, 'https://')) {
+            return $this->farmer_image;
+        }
+
+        // Convert storage path to full URL
+        return url($this->farmer_image);
+    }
+
     public function agent()
     {
         return $this->belongsTo(User::class, 'agent_id');

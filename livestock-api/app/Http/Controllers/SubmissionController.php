@@ -109,13 +109,42 @@ class SubmissionController extends Controller
                 'created_by' => 'nullable|string|max:255',
             ];
 
-            $rules['farmer_image'] = 'nullable|string';
+            $rules['farmer_image'] = 'nullable';
 
             $validated = $request->validate($rules);
 
-            // Store farmer_image as provided (including blob URLs)
-            if ($request->filled('farmer_image')) {
-                $validated['farmer_image'] = $request->farmer_image;
+            Log::info('Image upload debug', [
+                'hasFile' => $request->hasFile('farmer_image'),
+                'filled' => $request->filled('farmer_image'),
+                'value' => $request->input('farmer_image') ? substr($request->input('farmer_image'), 0, 50) : null,
+                'allFiles' => $request->allFiles(),
+            ]);
+
+            // Store farmer_image in Laravel standard format
+            if ($request->hasFile('farmer_image')) {
+                $path = $request->file('farmer_image')->store('farmers', 'public');
+                // Store path like: storage/farmers/filename.jpg
+                $validated['farmer_image'] = 'storage/' . $path;
+            } else if ($request->filled('farmer_image')) {
+                // Handle base64 images
+                if (str_starts_with($request->farmer_image, 'data:image')) {
+                    $imageData = explode(',', $request->farmer_image)[1];
+                    $decoded = base64_decode($imageData);
+                    $filename = uniqid() . '.jpg';
+                    $path = 'farmers/' . $filename;
+                    \Illuminate\Support\Facades\Storage::disk('public')->put($path, $decoded);
+                    // Store path like: storage/farmers/filename.jpg
+                    $validated['farmer_image'] = 'storage/' . $path;
+                } else if (!str_starts_with($request->farmer_image, '[object Object]')) {
+                    // Only store valid string values
+                    $validated['farmer_image'] = $request->farmer_image;
+                } else {
+                    // Set to null for invalid values
+                    $validated['farmer_image'] = null;
+                }
+            } else {
+                // Ensure null is stored instead of empty string
+                $validated['farmer_image'] = null;
             }
 
             // Generate registration ID
@@ -138,6 +167,7 @@ class SubmissionController extends Controller
                 'farmer_name' => $validated['farmer_name'],
                 'lga' => $validated['lga'],
                 'ward' => $validated['ward'],
+                'has_image' => $request->hasFile('farmer_image') || $request->filled('farmer_image')
             ]);
 
             $submission = LivestockSubmission::create($validated);
@@ -218,7 +248,7 @@ class SubmissionController extends Controller
                 'membership_status' => 'nullable|string|max:100',
                 'executive_position' => 'nullable|string|max:100',
                 'geo_location' => 'nullable|string|max:255',
-                'farmer_image' => 'nullable|string',
+                'farmer_image' => 'nullable',
                 'has_disease' => 'nullable|string|max:10',
                 'disease_name' => 'nullable|string|max:255',
                 'disease_description' => 'nullable|string',
@@ -226,6 +256,38 @@ class SubmissionController extends Controller
                 'agent_serial_number' => 'nullable|integer',
                 'submission_status' => 'nullable|string|in:pending,synced,failed',
             ]);
+
+            // Handle farmer image update
+            if ($request->hasFile('farmer_image')) {
+                // Delete old image if exists
+                if ($submission->farmer_image && file_exists(public_path($submission->farmer_image))) {
+                    @unlink(public_path($submission->farmer_image));
+                }
+                
+                $path = $request->file('farmer_image')->store('farmers', 'public');
+                $validated['farmer_image'] = 'storage/' . $path;
+            } else if ($request->has('farmer_image')) {
+                if ($request->farmer_image === null || $request->farmer_image === 'null') {
+                    // Explicitly setting to null
+                    $validated['farmer_image'] = null;
+                } else if (str_starts_with($request->farmer_image, 'data:image')) {
+                    // Delete old image if exists
+                    if ($submission->farmer_image && file_exists(public_path($submission->farmer_image))) {
+                        @unlink(public_path($submission->farmer_image));
+                    }
+                    
+                    // Handle base64 images
+                    $imageData = explode(',', $request->farmer_image)[1];
+                    $decoded = base64_decode($imageData);
+                    $filename = uniqid() . '.jpg';
+                    $path = 'farmers/' . $filename;
+                    \Illuminate\Support\Facades\Storage::disk('public')->put($path, $decoded);
+                    $validated['farmer_image'] = 'storage/' . $path;
+                } else if (str_starts_with($request->farmer_image, '[object Object]')) {
+                    // Don't update if invalid value
+                    unset($validated['farmer_image']);
+                }
+            }
 
             $submission->update($validated);
 
@@ -279,6 +341,11 @@ class SubmissionController extends Controller
     public function syncBatch(Request $request)
     {
         try {
+            Log::info('Sync batch received', [
+                'submissions' => $request->input('submissions'),
+                'files' => $request->allFiles(),
+            ]);
+
             $validated = $request->validate([
                 'submissions' => 'required|array|min:1',
                 'submissions.*.farmer_id' => 'nullable|string|max:50',
@@ -298,14 +365,39 @@ class SubmissionController extends Controller
 
             foreach ($validated['submissions'] as $index => $data) {
                 try {
-                    $data['registration_id'] = LivestockSubmission::generateRegistrationId();
-                    $data['agent_id'] = $request->user()->id;
-                    $data['agent_name'] = $request->user()->full_name;
-                    $data['submission_status'] = 'synced';
-                    $data['created_by'] = $request->user()->email;
-                    
-                    $submission = LivestockSubmission::create($data);
-                    $created[] = $submission;
+                // Handle image upload for this specific submission
+                if ($request->hasFile("submissions.{$index}.farmer_image")) {
+                    $path = $request->file("submissions.{$index}.farmer_image")->store('farmers', 'public');
+                    // Store path like: storage/farmers/filename.jpg
+                    $data['farmer_image'] = 'storage/' . $path;
+                } else if (isset($data['farmer_image']) && is_string($data['farmer_image'])) {
+                    if (str_starts_with($data['farmer_image'], 'data:image')) {
+                        $imageData = explode(',', $data['farmer_image'])[1];
+                        $decoded = base64_decode($imageData);
+                        $filename = uniqid() . '.jpg';
+                        $path = 'farmers/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('public')->put($path, $decoded);
+                        // Store path like: storage/farmers/filename.jpg
+                        $data['farmer_image'] = 'storage/' . $path;
+                    } else if (str_starts_with($data['farmer_image'], '[object Object]')) {
+                        // Prevent saving [object Object] to the database
+                        $data['farmer_image'] = null;
+                    }
+                } else {
+                    // Make sure null is saved for invalid values
+                    if (isset($data['farmer_image']) && ($data['farmer_image'] === '[object Object]' || empty($data['farmer_image']))) {
+                         $data['farmer_image'] = null;
+                    }
+                }
+
+                $data['registration_id'] = LivestockSubmission::generateRegistrationId();
+                $data['agent_id'] = $request->user()->id;
+                $data['agent_name'] = $request->user()->full_name;
+                $data['submission_status'] = 'synced';
+                $data['created_by'] = $request->user()->email;
+                
+                $submission = LivestockSubmission::create($data);
+                $created[] = $submission;
                 } catch (\Exception $e) {
                     $errors[] = [
                         'index' => $index,

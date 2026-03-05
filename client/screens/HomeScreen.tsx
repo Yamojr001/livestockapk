@@ -10,6 +10,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { ThemedText } from "@/components/ThemedText";
 import { SubmissionCard } from "@/components/SubmissionCard";
 import { storage } from "@/lib/storage";
+import { getFarmerImageUrl } from "@/lib/imageUtils";
 import type { LivestockSubmission } from "@/types";
 
 export default function HomeScreen() {
@@ -41,31 +42,6 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [loadData]);
 
-  const getImageUrl = (imagePath: string | null | undefined) => {
-    if (!imagePath) return null;
-    
-    if (imagePath.startsWith("blob:")) {
-      const regId = selectedFarmer?.registration_id || selectedFarmer?.farmer_id;
-      if (regId) {
-        return `https://renthousehq.com/storage/farmers/${regId}.jpg`;
-      }
-      return imagePath;
-    }
-
-    if (
-      imagePath.startsWith("http") ||
-      imagePath.startsWith("data:") ||
-      imagePath.startsWith("file:")
-    ) {
-      return imagePath;
-    }
-    
-    if (imagePath.includes('/')) {
-        return `https://renthousehq.com/storage/${imagePath}`;
-    }
-    return `https://renthousehq.com/storage/farmers/${imagePath}`;
-  };
-
   const FarmerDetailsModal = () => {
     if (!selectedFarmer) return null;
 
@@ -87,9 +63,9 @@ export default function HomeScreen() {
 
             <ScrollView contentContainerStyle={styles.modalBody}>
               <View style={styles.detailPhotoContainer}>
-                {getImageUrl(selectedFarmer.farmer_image) ? (
+                {getFarmerImageUrl(selectedFarmer) ? (
                   <Image
-                    source={{ uri: getImageUrl(selectedFarmer.farmer_image)! }}
+                    source={{ uri: getFarmerImageUrl(selectedFarmer)! }}
                     style={styles.detailPhoto}
                     resizeMode="cover"
                   />

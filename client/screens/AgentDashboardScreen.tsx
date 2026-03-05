@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -25,6 +26,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { storage } from "@/lib/storage";
 import { syncService } from "@/lib/sync-service";
+import { submissionApi } from "@/lib/api-config";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import type { LivestockSubmission } from "@/types";
 
@@ -46,19 +48,53 @@ export default function AgentDashboardScreen() {
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    const [allSubmissions, pending, syncDate] = await Promise.all([
-      storage.getSubmissions(),
-      storage.getPendingSubmissions(),
-      storage.getLastSync(),
-    ]);
+    try {
+      // First get local pending and sync date
+      const [pending, syncDate] = await Promise.all([
+        storage.getPendingSubmissions(),
+        storage.getLastSync(),
+      ]);
 
-    const mySubmissions = allSubmissions.filter(
-      (s) => s.created_by === user?.email
-    );
-    setSubmissions(mySubmissions);
-    setPendingSubmissions(pending);
-    setLastSync(syncDate);
-  }, [user?.email]);
+      let allSubmissions: LivestockSubmission[] = [];
+
+      // If online, fetch fresh submissions from server
+      if (isOnline) {
+        const response = await submissionApi.getAll({ per_page: 100 });
+        if (response.success && response.data?.data) {
+          allSubmissions = response.data.data;
+
+          // Optionally cache them locally
+          const formattedSubmissions = allSubmissions.map(sub => ({
+            ...sub,
+            submission_status: sub.submission_status || 'synced'
+          })) as any;
+          await storage.setSyncedSubmissions(formattedSubmissions);
+          allSubmissions = formattedSubmissions;
+        } else {
+          // Fallback to local
+          allSubmissions = (await storage.getSubmissions()) as any;
+        }
+      } else {
+        // Offline uses local
+        allSubmissions = (await storage.getSubmissions()) as any;
+      }
+
+      // Filter for current user and prevent duplicates
+      const mySubmissions = allSubmissions.filter(
+        (s) => s.created_by === user?.email || s.agent_id === user?.id
+      );
+
+      // Merge with offline pending 
+      const existingIds = new Set(mySubmissions.map((s: any) => s.registration_id));
+      const myPending = pending.filter(s => (s.created_by === user?.email || s.agent_id === user?.id) && !existingIds.has(s.registration_id));
+
+      setSubmissions([...myPending, ...mySubmissions] as any);
+      setPendingSubmissions(myPending as any);
+      setLastSync(syncDate);
+    } catch (error) {
+      console.error("Dashboard load data error:", error);
+    }
+  }, [user?.email, user?.id, isOnline]);
 
   useEffect(() => {
     loadData();
@@ -71,12 +107,20 @@ export default function AgentDashboardScreen() {
   }, [loadData]);
 
   const handleSync = async () => {
-    if (!isOnline || pendingSubmissions.length === 0) return;
+    if (!isOnline) {
+      Alert.alert("Offline", "Please connect to the internet to sync your submissions.");
+      return;
+    }
+
+    if (pendingSubmissions.length === 0) {
+      Alert.alert("Up to Date", "All your submissions are already synced to the server!", [{ text: "OK" }]);
+      return;
+    }
 
     setIsSyncing(true);
     try {
       const result = await syncService.syncPendingSubmissions();
-      
+
       if (result.success) {
         await loadData();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -149,34 +193,38 @@ export default function AgentDashboardScreen() {
           </Badge>
         </View>
 
-        {pendingSubmissions.length > 0 && isOnline ? (
-          <Pressable
-            onPress={handleSync}
-            disabled={isSyncing}
-            style={[
-              styles.syncBanner,
-              { backgroundColor: theme.warning, opacity: isSyncing ? 0.7 : 1 },
-            ]}
-          >
-            <View style={styles.syncContent}>
-              <Feather name="cloud-off" size={20} color="#fff" />
-              <View style={styles.syncText}>
-                <ThemedText style={styles.syncTitle}>
-                  {pendingSubmissions.length} pending submission
-                  {pendingSubmissions.length > 1 ? "s" : ""}
-                </ThemedText>
-                <ThemedText style={styles.syncSubtitle}>
-                  Tap to sync to server
-                </ThemedText>
-              </View>
+        <Pressable
+          onPress={handleSync}
+          disabled={isSyncing}
+          style={[
+            styles.syncBanner,
+            {
+              backgroundColor: pendingSubmissions.length > 0 ? theme.warning : theme.success,
+              opacity: isSyncing ? 0.7 : 1
+            },
+          ]}
+        >
+          <View style={styles.syncContent}>
+            <Feather name={pendingSubmissions.length > 0 ? "cloud-off" : "check-circle"} size={20} color="#fff" />
+            <View style={styles.syncText}>
+              <ThemedText style={styles.syncTitle}>
+                {pendingSubmissions.length > 0
+                  ? `${pendingSubmissions.length} pending submission${pendingSubmissions.length > 1 ? "s" : ""}`
+                  : "All data synced"}
+              </ThemedText>
+              <ThemedText style={styles.syncSubtitle}>
+                {pendingSubmissions.length > 0
+                  ? "Tap to sync to server"
+                  : "Your submissions are up to date"}
+              </ThemedText>
             </View>
-            {isSyncing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Feather name="refresh-cw" size={20} color="#fff" />
-            )}
-          </Pressable>
-        ) : null}
+          </View>
+          {isSyncing ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Feather name="refresh-cw" size={20} color="#fff" />
+          )}
+        </Pressable>
 
         {!isOnline ? (
           <View

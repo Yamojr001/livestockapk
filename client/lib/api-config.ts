@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_URL_KEY = "@livestock_api_url";
 const AUTH_TOKEN_KEY = "@livestock_auth_token";
 
-const DEFAULT_API_URL = "https://livestock.northdemy.com/api/v1";
+const DEFAULT_API_URL = "http://127.0.0.1:8000/api/v1";
 
 export async function getApiBaseUrl() {
   try {
@@ -49,10 +49,13 @@ export async function apiRequest(endpoint, options = {}) {
       (typeof FormData !== "undefined" && body instanceof FormData) ||
       (body && typeof body === "object" && "_parts" in body);
 
-    const headers = {
+    const headers: Record<string, string> = {
       Accept: "application/json",
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
     };
+
+    if (!isFormData) {
+      headers["Content-Type"] = "application/json";
+    }
 
     if (requiresAuth) {
       const token = await getAuthToken();
@@ -159,7 +162,6 @@ export async function apiRequest(endpoint, options = {}) {
       errorMessage = "Request timed out. Please try again.";
     }
 
-    // Provide more helpful error messages
     if (
       errorMessage.includes("Failed to fetch") ||
       errorMessage.includes("NetworkError") ||
@@ -230,7 +232,43 @@ export const submissionApi = {
     return apiRequest("/submissions/stats");
   },
 
-  async syncBatch(submissions) {
+  async syncBatch(submissions: any[]) {
+    // Check if any submission has a local image that needs to be sent as a file
+    const needsMultipart = submissions.some(sub =>
+      sub.farmer_image && typeof sub.farmer_image === 'string' && sub.farmer_image.startsWith('file://')
+    );
+
+    if (needsMultipart) {
+      const formData = new FormData();
+
+      submissions.forEach((sub, index) => {
+        // Handle each field, convert image URIs to file objects
+        Object.keys(sub).forEach(key => {
+          const value = sub[key];
+          if (key === 'farmer_image' && value && typeof value === 'string' && value.startsWith('file://')) {
+            // Convert to file object
+            const filename = value.split('/').pop() || 'image.jpg';
+            const match = /\\.(\\w+)$/.exec(filename);
+            const type = match ? `image/${match[1]}` : 'image/jpeg';
+            formData.append(`submissions[${index}][${key}]`, {
+              uri: value,
+              name: filename,
+              type,
+            } as any);
+          } else {
+            // Regular field
+            formData.append(`submissions[${index}][${key}]`, value != null ? String(value) : '');
+          }
+        });
+      });
+
+      return apiRequest("/submissions/sync", {
+        method: "POST",
+        body: formData,
+      });
+    }
+
+    // No images to upload as files → send JSON
     return apiRequest("/submissions/sync", {
       method: "POST",
       body: { submissions },

@@ -30,6 +30,7 @@ import { useNetwork } from "@/contexts/NetworkContext";
 import { storage } from "@/lib/storage";
 import { apiRequest } from "@/lib/api-config";
 import { imageCacheService } from "@/lib/image-cache-service";
+import { extractImageUri } from "@/lib/imageUtils";
 import { getLGAs, getWards, ASSOCIATIONS, BANKS } from "@/data/lgaWardData";
 import { generateFarmerId } from "@/lib/farmer-id-generator";
 import { BorderRadius, Spacing } from "@/constants/theme";
@@ -162,7 +163,7 @@ export default function SubmissionFormScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
+        const imageUri = extractImageUri(result.assets[0].uri);
         setFarmerImage(imageUri);
         if (errors.image) {
           setErrors((prev) => ({ ...prev, image: "" }));
@@ -199,7 +200,7 @@ export default function SubmissionFormScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
+        const imageUri = extractImageUri(result.assets[0].uri);
         setFarmerImage(imageUri);
         if (errors.image) {
           setErrors((prev) => ({ ...prev, image: "" }));
@@ -282,7 +283,7 @@ export default function SubmissionFormScreen() {
 
     try {
       const registrationId = generateRegistrationId();
-      
+
       // Generate unique farmer ID
       let farmerId = "";
       try {
@@ -296,43 +297,83 @@ export default function SubmissionFormScreen() {
         farmerId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
 
-        // Prepare submission data for server
-        const submissionData = {
-          farmer_id: farmerId,
-          farmer_name: formData.farmer_name.trim(),
-          gender: formData.gender || null,
-          age: formData.age ? parseInt(formData.age) : null,
-          contact_number: formData.contact_number.trim(),
-          nin: formData.nin || null,
-          bvn: formData.bvn || null,
-          vin: formData.vin || null,
-          literacy_status: formData.literacy_status || null,
-          bank: formData.bank || null,
-          account_number: formData.account_number || null,
-          lga: formData.lga,
-          ward: formData.ward,
-          association: formData.association,
-          number_of_animals: parseInt(formData.number_of_animals),
-          membership_status: formData.membership_status || null,
-          executive_position: formData.executive_position || null,
-          geo_location: geoLocation || null,
-          farmer_image: farmerImage || null,
-          has_disease: formData.has_disease || null,
-          disease_name: formData.disease_name || null,
-          disease_description: formData.disease_description || null,
-          comments: formData.comments || null,
-          agent_serial_number: user?.agent_serial_number || null,
-          created_by: user?.email || "",
-        };
+      // Prepare submission data for server
+      const submissionData = {
+        farmer_id: farmerId,
+        farmer_name: formData.farmer_name.trim(),
+        gender: formData.gender || null,
+        age: formData.age ? parseInt(formData.age) : null,
+        contact_number: formData.contact_number.trim(),
+        nin: formData.nin || null,
+        bvn: formData.bvn || null,
+        vin: formData.vin || null,
+        literacy_status: formData.literacy_status || null,
+        bank: formData.bank || null,
+        account_number: formData.account_number || null,
+        lga: formData.lga,
+        ward: formData.ward,
+        association: formData.association,
+        number_of_animals: parseInt(formData.number_of_animals),
+        membership_status: formData.membership_status || null,
+        executive_position: formData.executive_position || null,
+        geo_location: geoLocation || null,
+        farmer_image: extractImageUri(farmerImage) || null,
+        has_disease: formData.has_disease || null,
+        disease_name: formData.disease_name || null,
+        disease_description: formData.disease_description || null,
+        comments: formData.comments || null,
+        agent_serial_number: user?.agent_serial_number || null,
+        created_by: user?.email || "",
+      };
 
       if (isOnline) {
-        // Send image URI as-is (including blob)
+        // Send image URI as a File in FormData if available
+        let response;
         const cachedImagePath: string | null = null;
-        const response = await apiRequest("/submissions", {
-          method: "POST",
-          body: { ...submissionData, farmer_image: farmerImage || null },
-        });
-        
+
+        if (farmerImage) {
+          const formData = new FormData();
+
+          // Append all regular fields
+          Object.keys(submissionData).forEach(key => {
+            const value = submissionData[key as keyof typeof submissionData];
+            if (value !== null && value !== undefined && key !== 'farmer_image') {
+              formData.append(key, value.toString());
+            }
+          });
+
+          // Append image file with proper URI handling
+          let imageUri = farmerImage;
+          
+          // Ensure proper file:// protocol for local files
+          if (!imageUri.startsWith('http') && !imageUri.startsWith('file://')) {
+            imageUri = `file://${imageUri}`;
+          }
+          
+          const filename = `farmer_${Date.now()}.jpg`;
+          const match = /\.(\w+)$/.exec(farmerImage);
+          const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+          console.log('Uploading image:', { uri: imageUri, name: filename, type });
+
+          formData.append('farmer_image', {
+            uri: imageUri,
+            name: filename,
+            type
+          } as any);
+
+          response = await apiRequest("/submissions", {
+            method: "POST",
+            body: formData,
+          });
+        } else {
+          // Send as JSON if no image
+          response = await apiRequest("/submissions", {
+            method: "POST",
+            body: submissionData,
+          });
+        }
+
         if (response.success) {
           const serverData = response.data;
           // Use server image path for online storage
@@ -343,14 +384,14 @@ export default function SubmissionFormScreen() {
             farmer_image: serverData.farmer_image || cachedImagePath || farmerImage,
             created_at: new Date().toISOString(),
           };
-          
+
           // Cache the server image URL for offline use
           if (serverData.farmer_image && serverData.farmer_image.startsWith('http')) {
             await imageCacheService.cacheImageFromUrl(serverData.farmer_image);
           }
-          
+
           await storage.addSubmission(submissionWithImage as any);
-          
+
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           resetForm();
           setShowSuccess(true);
@@ -358,7 +399,7 @@ export default function SubmissionFormScreen() {
           // Save pending with cached image if available
           await storage.addPendingSubmission({
             ...submissionData,
-            farmer_image: cachedImagePath || farmerImage,
+            farmer_image: extractImageUri(cachedImagePath || farmerImage),
             registration_id: registrationId,
             agent_id: user?.id || null,
             agent_name: user?.full_name || null,
@@ -374,16 +415,16 @@ export default function SubmissionFormScreen() {
       } else {
         // Offline: save pending submission with the original image URI
         const cachedImagePath = farmerImage || null;
-        
+
         await storage.addPendingSubmission({
           ...submissionData,
-          farmer_image: cachedImagePath,
+          farmer_image: extractImageUri(cachedImagePath),
           registration_id: registrationId,
           agent_id: user?.id || null,
           agent_name: user?.full_name || null,
           created_at: new Date().toISOString(),
         } as any);
-        
+
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         resetForm();
         setShowSuccess(true);
@@ -439,440 +480,438 @@ export default function SubmissionFormScreen() {
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         showsVerticalScrollIndicator={false}
       >
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Feather name="camera" size={18} color={theme.primary} />
-          <ThemedText style={styles.sectionTitle}>Farmer Photo</ThemedText>
-        </View>
-
-        <View style={styles.imageContainer}>
-          {farmerImage ? (
-            <Pressable onPress={takePhoto} style={styles.imagePreviewContainer}>
-              <Image source={{ uri: farmerImage }} style={styles.imagePreview} />
-              <View style={[styles.imageOverlay, { backgroundColor: "rgba(0,0,0,0.3)" }]}>
-                <Feather name="camera" size={24} color="#fff" />
-                <ThemedText style={styles.imageOverlayText}>Tap to retake</ThemedText>
-              </View>
-            </Pressable>
-          ) : (
-            <View style={styles.imageButtons}>
-              <Pressable
-                onPress={takePhoto}
-                style={[styles.imageButton, { backgroundColor: theme.primary }]}
-              >
-                <Feather name="camera" size={24} color="#fff" />
-                <ThemedText style={styles.imageButtonText}>Take Photo</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={pickImage}
-                style={[styles.imageButton, { backgroundColor: theme.backgroundDefault, borderWidth: 1, borderColor: theme.border }]}
-              >
-                <Feather name="image" size={24} color={theme.text} />
-                <ThemedText style={[styles.imageButtonText, { color: theme.text }]}>Choose from Gallery</ThemedText>
-              </Pressable>
-            </View>
-          )}
-        </View>
-        {errors.image ? (
-          <ThemedText style={[styles.errorText, { color: theme.error }]}>
-            {errors.image}
-          </ThemedText>
-        ) : null}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Feather name="user" size={18} color={theme.primary} />
-          <ThemedText style={styles.sectionTitle}>Farmer Information</ThemedText>
-        </View>
-
-        <FormInput
-          label="Farmer Name *"
-          placeholder="Enter full name"
-          value={formData.farmer_name}
-          onChangeText={(v) => updateField("farmer_name", v)}
-          error={errors.farmer_name}
-          autoCapitalize="words"
-        />
-
-        <FormPicker
-          label="Gender"
-          placeholder="Select gender"
-          value={formData.gender}
-          options={["Male", "Female", "Other"]}
-          onChange={(v) => updateField("gender", v)}
-        />
-
-        <FormInput
-          label="Age"
-          placeholder="Enter age"
-          value={formData.age}
-          onChangeText={(v) => updateField("age", v)}
-          keyboardType="number-pad"
-          error={errors.age}
-        />
-
-        <FormInput
-          label="Contact Number *"
-          placeholder="08012345678"
-          value={formData.contact_number}
-          onChangeText={(v) => updateField("contact_number", v)}
-          error={errors.contact_number}
-          keyboardType="phone-pad"
-          maxLength={11}
-        />
-
-        <FormInput
-          label="NIN (National ID Number)"
-          placeholder="11-digit NIN"
-          value={formData.nin}
-          onChangeText={(v) => updateField("nin", v)}
-          keyboardType="number-pad"
-          maxLength={11}
-          error={errors.nin}
-        />
-
-        <FormInput
-          label="BVN (Bank Verification Number)"
-          placeholder="11-digit BVN"
-          value={formData.bvn}
-          onChangeText={(v) => updateField("bvn", v)}
-          keyboardType="number-pad"
-          maxLength={11}
-          error={errors.bvn}
-        />
-
-        <FormInput
-          label="VIN (Voter ID Number)"
-          placeholder="Voter ID Number"
-          value={formData.vin}
-          onChangeText={(v) => updateField("vin", v)}
-        />
-
-        <FormPicker
-          label="Literacy Status"
-          placeholder="Select literacy status"
-          value={formData.literacy_status}
-          options={["Literate", "Semi-Literate", "Illiterate"]}
-          onChange={(v) => updateField("literacy_status", v)}
-        />
-
-        <FormPicker
-          label="Bank"
-          placeholder="Select bank"
-          value={formData.bank}
-          options={BANKS}
-          onChange={(v) => updateField("bank", v)}
-        />
-
-        <FormInput
-          label="Account Number"
-          placeholder="10-digit account number"
-          value={formData.account_number}
-          onChangeText={(v) => updateField("account_number", v)}
-          keyboardType="number-pad"
-          maxLength={10}
-          error={errors.account_number}
-        />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Feather name="map-pin" size={18} color={theme.primary} />
-          <ThemedText style={styles.sectionTitle}>Location</ThemedText>
-        </View>
-
-        <FormPicker
-          label="LGA *"
-          placeholder="Select LGA"
-          value={formData.lga}
-          options={getLGAs()}
-          onChange={(v) => {
-            updateField("lga", v);
-            updateField("ward", "");
-          }}
-          error={errors.lga}
-        />
-
-        <FormPicker
-          label="Ward *"
-          placeholder="Select Ward"
-          value={formData.ward}
-          options={wards}
-          onChange={(v) => updateField("ward", v)}
-          error={errors.ward}
-          disabled={!formData.lga}
-        />
-
-        {previewFarmerId && (
-          <View
-            style={[
-              styles.farmerIdContainer,
-              { backgroundColor: theme.backgroundDefault, borderColor: theme.primary },
-            ]}
-          >
-            <View style={styles.farmerIdHeader}>
-              <Feather name="hash" size={18} color={theme.primary} />
-              <ThemedText style={[styles.farmerIdLabel, { color: theme.text }]}>
-                Farmer ID
-              </ThemedText>
-            </View>
-            <ThemedText style={[styles.farmerIdValue, { color: theme.primary }]}>
-              {previewFarmerId}
-            </ThemedText>
-            <ThemedText style={[styles.farmerIdHint, { color: theme.textSecondary }]}>
-              This ID will be assigned to all farmers registered by this agent in this ward
-            </ThemedText>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Feather name="camera" size={18} color={theme.primary} />
+            <ThemedText style={styles.sectionTitle}>Farmer Photo</ThemedText>
           </View>
-        )}
 
-        <View style={styles.locationRow}>
-          <View style={{ flex: 1 }}>
-            <ThemedText style={[styles.label, { color: theme.text }]}>
-              GPS Location
+          <View style={styles.imageContainer}>
+            {farmerImage ? (
+              <Pressable onPress={takePhoto} style={styles.imagePreviewContainer}>
+                <Image source={{ uri: farmerImage }} style={styles.imagePreview} />
+                <View style={[styles.imageOverlay, { backgroundColor: "rgba(0,0,0,0.3)" }]}>
+                  <Feather name="camera" size={24} color="#fff" />
+                  <ThemedText style={styles.imageOverlayText}>Tap to retake</ThemedText>
+                </View>
+              </Pressable>
+            ) : (
+              <View style={styles.imageButtons}>
+                <Pressable
+                  onPress={takePhoto}
+                  style={[styles.imageButton, { backgroundColor: theme.primary }]}
+                >
+                  <Feather name="camera" size={24} color="#fff" />
+                  <ThemedText style={styles.imageButtonText}>Take Photo</ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={pickImage}
+                  style={[styles.imageButton, { backgroundColor: theme.backgroundDefault, borderWidth: 1, borderColor: theme.border }]}
+                >
+                  <Feather name="image" size={24} color={theme.text} />
+                  <ThemedText style={[styles.imageButtonText, { color: theme.text }]}>Choose from Gallery</ThemedText>
+                </Pressable>
+              </View>
+            )}
+          </View>
+          {errors.image ? (
+            <ThemedText style={[styles.errorText, { color: theme.error }]}>
+              {errors.image}
             </ThemedText>
+          ) : null}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Feather name="user" size={18} color={theme.primary} />
+            <ThemedText style={styles.sectionTitle}>Farmer Information</ThemedText>
+          </View>
+
+          <FormInput
+            label="Farmer Name *"
+            placeholder="Enter full name"
+            value={formData.farmer_name}
+            onChangeText={(v) => updateField("farmer_name", v)}
+            error={errors.farmer_name}
+            autoCapitalize="words"
+          />
+
+          <FormPicker
+            label="Gender"
+            placeholder="Select gender"
+            value={formData.gender}
+            options={["Male", "Female", "Other"]}
+            onChange={(v) => updateField("gender", v)}
+          />
+
+          <FormInput
+            label="Age"
+            placeholder="Enter age"
+            value={formData.age}
+            onChangeText={(v) => updateField("age", v)}
+            keyboardType="number-pad"
+            error={errors.age}
+          />
+
+          <FormInput
+            label="Contact Number *"
+            placeholder="08012345678"
+            value={formData.contact_number}
+            onChangeText={(v) => updateField("contact_number", v)}
+            error={errors.contact_number}
+            keyboardType="phone-pad"
+            maxLength={11}
+          />
+
+          <FormInput
+            label="NIN (National ID Number)"
+            placeholder="11-digit NIN"
+            value={formData.nin}
+            onChangeText={(v) => updateField("nin", v)}
+            keyboardType="number-pad"
+            maxLength={11}
+            error={errors.nin}
+          />
+
+          <FormInput
+            label="BVN (Bank Verification Number)"
+            placeholder="11-digit BVN"
+            value={formData.bvn}
+            onChangeText={(v) => updateField("bvn", v)}
+            keyboardType="number-pad"
+            maxLength={11}
+            error={errors.bvn}
+          />
+
+          <FormInput
+            label="VIN (Voter ID Number)"
+            placeholder="Voter ID Number"
+            value={formData.vin}
+            onChangeText={(v) => updateField("vin", v)}
+          />
+
+          <FormPicker
+            label="Literacy Status"
+            placeholder="Select literacy status"
+            value={formData.literacy_status}
+            options={["Literate", "Semi-Literate", "Illiterate"]}
+            onChange={(v) => updateField("literacy_status", v)}
+          />
+
+          <FormPicker
+            label="Bank"
+            placeholder="Select bank"
+            value={formData.bank}
+            options={BANKS}
+            onChange={(v) => updateField("bank", v)}
+          />
+
+          <FormInput
+            label="Account Number"
+            placeholder="10-digit account number"
+            value={formData.account_number}
+            onChangeText={(v) => updateField("account_number", v)}
+            keyboardType="number-pad"
+            maxLength={10}
+            error={errors.account_number}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Feather name="map-pin" size={18} color={theme.primary} />
+            <ThemedText style={styles.sectionTitle}>Location</ThemedText>
+          </View>
+
+          <FormPicker
+            label="LGA *"
+            placeholder="Select LGA"
+            value={formData.lga}
+            options={getLGAs()}
+            onChange={(v) => {
+              updateField("lga", v);
+              updateField("ward", "");
+            }}
+            error={errors.lga}
+          />
+
+          <FormPicker
+            label="Ward *"
+            placeholder="Select Ward"
+            value={formData.ward}
+            options={wards}
+            onChange={(v) => updateField("ward", v)}
+            error={errors.ward}
+            disabled={!formData.lga}
+          />
+
+          {previewFarmerId && (
             <View
               style={[
-                styles.locationDisplay,
-                { 
-                  backgroundColor: theme.backgroundDefault, 
-                  borderColor: geoLocation ? theme.success : theme.border,
-                  borderWidth: geoLocation ? 2 : 1,
-                },
+                styles.farmerIdContainer,
+                { backgroundColor: theme.backgroundDefault, borderColor: theme.primary },
               ]}
             >
-              <Feather
-                name="navigation"
-                size={16}
-                color={geoLocation ? theme.success : theme.textSecondary}
-              />
-              <ThemedText
-                style={[
-                  styles.locationText,
-                  { color: geoLocation ? theme.text : theme.textSecondary },
-                ]}
-                numberOfLines={1}
-              >
-                {geoLocation || "Not captured"}
+              <View style={styles.farmerIdHeader}>
+                <Feather name="hash" size={18} color={theme.primary} />
+                <ThemedText style={[styles.farmerIdLabel, { color: theme.text }]}>
+                  Farmer ID
+                </ThemedText>
+              </View>
+              <ThemedText style={[styles.farmerIdValue, { color: theme.primary }]}>
+                {previewFarmerId}
               </ThemedText>
-            </View>
-          </View>
-          <Button
-            onPress={getLocation}
-            disabled={isGettingLocation}
-            style={
-              [styles.locationButton,
-              { backgroundColor: geoLocation ? theme.success : theme.primary }] as any
-            }
-          >
-            {isGettingLocation ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Feather name="crosshair" size={18} color="#fff" />
-            )}
-          </Button>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Feather name="tag" size={18} color={theme.primary} />
-          <ThemedText style={styles.sectionTitle}>Association</ThemedText>
-        </View>
-
-        <FormPicker
-          label="Association *"
-          placeholder="Select association"
-          value={formData.association}
-          options={ASSOCIATIONS}
-          onChange={(v) => updateField("association", v)}
-          error={errors.association}
-        />
-
-        <FormInput
-          label="Number of Animals *"
-          placeholder="Total livestock count"
-          value={formData.number_of_animals}
-          onChangeText={(v) => updateField("number_of_animals", v)}
-          error={errors.number_of_animals}
-          keyboardType="number-pad"
-        />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Feather name="briefcase" size={18} color={theme.primary} />
-          <ThemedText style={styles.sectionTitle}>Association Details</ThemedText>
-        </View>
-
-        <FormPicker
-          label="Association *"
-          placeholder="Select association"
-          value={formData.association}
-          options={ASSOCIATIONS}
-          onChange={(v) => updateField("association", v)}
-          error={errors.association}
-          required
-        />
-
-        <FormInput
-          label="Number of Animals *"
-          placeholder="Enter total count"
-          value={formData.number_of_animals}
-          onChangeText={(v) => updateField("number_of_animals", v)}
-          error={errors.number_of_animals}
-          keyboardType="number-pad"
-          required
-        />
-
-        <FormPicker
-          label="Membership Status"
-          placeholder="Select status"
-          value={formData.membership_status}
-          options={["Active Member", "New Member", "Associate Member", "Honorary Member"]}
-          onChange={(v) => updateField("membership_status", v)}
-        />
-
-        <FormInput
-          label="Executive Position (if any)"
-          placeholder="e.g. Chairman, Secretary"
-          value={formData.executive_position}
-          onChangeText={(v) => updateField("executive_position", v)}
-          autoCapitalize="words"
-        />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Feather name="heart" size={18} color={theme.primary} />
-          <ThemedText style={styles.sectionTitle}>Livestock Health</ThemedText>
-        </View>
-
-        <FormPicker
-          label="Livestock Has Disease?"
-          placeholder="Select status"
-          value={formData.has_disease}
-          options={["No", "Yes"]}
-          onChange={(v) => {
-            updateField("has_disease", v);
-            if (v === "No") {
-              updateField("disease_name", "");
-              updateField("disease_description", "");
-            }
-          }}
-        />
-
-        {formData.has_disease === "Yes" ? (
-          <>
-            <FormInput
-              label="Disease Name"
-              placeholder="Name of the disease"
-              value={formData.disease_name}
-              onChangeText={(v) => updateField("disease_name", v)}
-              autoCapitalize="words"
-            />
-
-            <FormInput
-              label="Disease Description"
-              placeholder="Detailed description of the disease"
-              value={formData.disease_description}
-              onChangeText={(v) => updateField("disease_description", v)}
-              multiline
-              numberOfLines={3}
-              style={{ height: 80, textAlignVertical: "top" }}
-            />
-          </>
-        ) : null}
-
-        <FormInput
-          label="Comments / Notes"
-          placeholder="Any additional information..."
-          value={formData.comments}
-          onChangeText={(v) => updateField("comments", v)}
-          multiline
-          numberOfLines={4}
-          style={{ height: 100, textAlignVertical: "top" }}
-        />
-      </View>
-
-      <View style={[styles.section, { marginBottom: Spacing.xxl }]}>
-        <View style={styles.statusContainer}>
-          <Feather 
-            name={isOnline ? "wifi" : "wifi-off"} 
-            size={16} 
-            color={isOnline ? theme.success : theme.warning} 
-          />
-          <ThemedText style={[styles.statusText, { 
-            color: isOnline ? theme.success : theme.warning 
-          }]}>
-            {isOnline ? "Online - Data will sync immediately" : "Offline - Data saved locally"}
-          </ThemedText>
-        </View>
-
-        {errors.submit ? (
-          <ThemedText style={[styles.submitError, { color: theme.error }]}>
-            {errors.submit}
-          </ThemedText>
-        ) : null}
-
-        <Button
-          onPress={handleSubmit}
-          disabled={isSubmitting}
-          style={[
-            styles.submitButton,
-            { 
-              backgroundColor: isOnline ? theme.primary : theme.warning,
-              opacity: isSubmitting ? 0.7 : 1,
-            }
-          ]}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <View style={styles.buttonContent}>
-              <Feather name={isOnline ? "upload" : "save"} size={20} color="#fff" />
-              <ThemedText style={styles.buttonText}>
-                {isOnline ? "Submit & Sync Data" : "Save Data Offline"}
+              <ThemedText style={[styles.farmerIdHint, { color: theme.textSecondary }]}>
+                This ID will be assigned to all farmers registered by this agent in this ward
               </ThemedText>
             </View>
           )}
-        </Button>
 
-        <ThemedText style={[styles.noteText, { color: theme.textSecondary }]}>
-          Note: All fields marked with * are required. Ensure all information is accurate before submitting.
-        </ThemedText>
-      </View>
-    </KeyboardAwareScrollViewCompat>
+          <View style={styles.locationRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={[styles.label, { color: theme.text }]}>
+                GPS Location
+              </ThemedText>
+              <View
+                style={[
+                  styles.locationDisplay,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: geoLocation ? theme.success : theme.border,
+                    borderWidth: geoLocation ? 2 : 1,
+                  },
+                ]}
+              >
+                <Feather
+                  name="navigation"
+                  size={16}
+                  color={geoLocation ? theme.success : theme.textSecondary}
+                />
+                <ThemedText
+                  style={[
+                    styles.locationText,
+                    { color: geoLocation ? theme.text : theme.textSecondary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {geoLocation || "Not captured"}
+                </ThemedText>
+              </View>
+            </View>
+            <Button
+              onPress={getLocation}
+              disabled={isGettingLocation}
+              style={
+                [styles.locationButton,
+                { backgroundColor: geoLocation ? theme.success : theme.primary }] as any
+              }
+            >
+              {isGettingLocation ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Feather name="crosshair" size={18} color="#fff" />
+              )}
+            </Button>
+          </View>
+        </View>
 
-    <Modal
-      visible={showSuccess}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowSuccess(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={[styles.successContainer, { backgroundColor: theme.backgroundDefault }]}>
-          <LottieView
-            source={require("../../assets/animations/success.json")}
-            autoPlay
-            loop={false}
-            style={styles.lottie}
-            onAnimationFinish={() => {
-              setTimeout(() => {
-                setShowSuccess(false);
-                navigation.navigate("HomeTab");
-              }, 1500);
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Feather name="tag" size={18} color={theme.primary} />
+            <ThemedText style={styles.sectionTitle}>Association</ThemedText>
+          </View>
+
+          <FormPicker
+            label="Association *"
+            placeholder="Select association"
+            value={formData.association}
+            options={ASSOCIATIONS}
+            onChange={(v) => updateField("association", v)}
+            error={errors.association}
+          />
+
+          <FormInput
+            label="Number of Animals *"
+            placeholder="Total livestock count"
+            value={formData.number_of_animals}
+            onChangeText={(v) => updateField("number_of_animals", v)}
+            error={errors.number_of_animals}
+            keyboardType="number-pad"
+          />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Feather name="briefcase" size={18} color={theme.primary} />
+            <ThemedText style={styles.sectionTitle}>Association Details</ThemedText>
+          </View>
+
+          <FormPicker
+            label="Association *"
+            placeholder="Select association"
+            value={formData.association}
+            options={ASSOCIATIONS}
+            onChange={(v) => updateField("association", v)}
+            error={errors.association}
+          />
+
+          <FormInput
+            label="Number of Animals *"
+            placeholder="Enter total count"
+            value={formData.number_of_animals}
+            onChangeText={(v) => updateField("number_of_animals", v)}
+            error={errors.number_of_animals}
+            keyboardType="number-pad"
+          />
+
+          <FormPicker
+            label="Membership Status"
+            placeholder="Select status"
+            value={formData.membership_status}
+            options={["Active Member", "New Member", "Associate Member", "Honorary Member"]}
+            onChange={(v) => updateField("membership_status", v)}
+          />
+
+          <FormInput
+            label="Executive Position (if any)"
+            placeholder="e.g. Chairman, Secretary"
+            value={formData.executive_position}
+            onChangeText={(v) => updateField("executive_position", v)}
+            autoCapitalize="words"
+          />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Feather name="heart" size={18} color={theme.primary} />
+            <ThemedText style={styles.sectionTitle}>Livestock Health</ThemedText>
+          </View>
+
+          <FormPicker
+            label="Livestock Has Disease?"
+            placeholder="Select status"
+            value={formData.has_disease}
+            options={["No", "Yes"]}
+            onChange={(v) => {
+              updateField("has_disease", v);
+              if (v === "No") {
+                updateField("disease_name", "");
+                updateField("disease_description", "");
+              }
             }}
           />
-          <ThemedText style={styles.successTitle}>Success!</ThemedText>
-          <ThemedText style={styles.successMessage}>
-            Farmer record has been saved.
+
+          {formData.has_disease === "Yes" ? (
+            <>
+              <FormInput
+                label="Disease Name"
+                placeholder="Name of the disease"
+                value={formData.disease_name}
+                onChangeText={(v) => updateField("disease_name", v)}
+                autoCapitalize="words"
+              />
+
+              <FormInput
+                label="Disease Description"
+                placeholder="Detailed description of the disease"
+                value={formData.disease_description}
+                onChangeText={(v) => updateField("disease_description", v)}
+                multiline
+                numberOfLines={3}
+                style={{ height: 80, textAlignVertical: "top" }}
+              />
+            </>
+          ) : null}
+
+          <FormInput
+            label="Comments / Notes"
+            placeholder="Any additional information..."
+            value={formData.comments}
+            onChangeText={(v) => updateField("comments", v)}
+            multiline
+            numberOfLines={4}
+            style={{ height: 100, textAlignVertical: "top" }}
+          />
+        </View>
+
+        <View style={[styles.section, { marginBottom: Spacing.xl }]}>
+          <View style={styles.statusContainer}>
+            <Feather
+              name={isOnline ? "wifi" : "wifi-off"}
+              size={16}
+              color={isOnline ? theme.success : theme.warning}
+            />
+            <ThemedText style={[styles.statusText, {
+              color: isOnline ? theme.success : theme.warning
+            }]}>
+              {isOnline ? "Online - Data will sync immediately" : "Offline - Data saved locally"}
+            </ThemedText>
+          </View>
+
+          {errors.submit ? (
+            <ThemedText style={[styles.submitError, { color: theme.error }]}>
+              {errors.submit}
+            </ThemedText>
+          ) : null}
+
+          <Button
+            onPress={handleSubmit}
+            disabled={isSubmitting}
+            style={[
+              styles.submitButton,
+              {
+                backgroundColor: isOnline ? theme.primary : theme.warning,
+                opacity: isSubmitting ? 0.7 : 1,
+              }
+            ]}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <View style={styles.buttonContent}>
+                <Feather name={isOnline ? "upload" : "save"} size={20} color="#fff" />
+                <ThemedText style={styles.buttonText}>
+                  {isOnline ? "Submit & Sync Data" : "Save Data Offline"}
+                </ThemedText>
+              </View>
+            )}
+          </Button>
+
+          <ThemedText style={[styles.noteText, { color: theme.textSecondary }]}>
+            Note: All fields marked with * are required. Ensure all information is accurate before submitting.
           </ThemedText>
         </View>
-      </View>
-    </Modal>
-  </>
-);
+      </KeyboardAwareScrollViewCompat>
+
+      <Modal
+        visible={showSuccess}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccess(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.successContainer, { backgroundColor: theme.backgroundDefault }]}>
+            <LottieView
+              source={require("../../assets/animations/success.json")}
+              autoPlay
+              loop={false}
+              style={styles.lottie}
+              onAnimationFinish={() => {
+                setTimeout(() => {
+                  setShowSuccess(false);
+                  navigation.navigate("HomeTab");
+                }, 1500);
+              }}
+            />
+            <ThemedText style={styles.successTitle}>Success!</ThemedText>
+            <ThemedText style={styles.successMessage}>
+              Farmer record has been saved.
+            </ThemedText>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
 }
 
 const styles = StyleSheet.create({

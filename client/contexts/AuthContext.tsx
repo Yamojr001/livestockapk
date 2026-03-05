@@ -39,19 +39,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const storedUser = await storage.getUser();
       const token = await getAuthToken();
-      
+
       console.log("[AUTH] Loading user...");
       console.log("[AUTH] Stored user:", storedUser ? { id: storedUser.id, email: storedUser.email, role: storedUser.user_role } : null);
       console.log("[AUTH] Token exists:", !!token);
-      
+
       if (storedUser && token) {
         setUser(storedUser);
         console.log("[AUTH] User set from storage");
         try {
-          const response = await apiRequest<{ user: User }>("/auth/me");
+          const response = await apiRequest("/auth/me") as { success: boolean, data?: User, error?: string };
           console.log("[AUTH] /auth/me response:", response.success ? "Success" : `Failed: ${response.error}`);
-          if (response.success && response.data?.user) {
-            const apiUser = response.data.user;
+          // In Laravel, /auth/me returns the user directly in `data`, not `data.user`
+          if (response.success && response.data) {
+            const apiUser = response.data;
             const updatedUser: User = {
               id: String(apiUser.id),
               email: apiUser.email,
@@ -62,6 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               assigned_lga: apiUser.assigned_lga || undefined,
               assigned_ward: apiUser.assigned_ward || undefined,
               created_date: storedUser.created_date,
+              email_verified: apiUser.email_verified || false,
+              phone_verified: apiUser.phone_verified || false,
+              two_factor_enabled: apiUser.two_factor_enabled || false,
             };
             setUser(updatedUser);
             console.log("[AUTH] User updated from API");
@@ -86,10 +90,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const hasAuthenticated = await AsyncStorage.getItem(HAS_AUTHENTICATED_KEY);
       const existingToken = await getAuthToken();
       const storedUser = await storage.getUser();
-      
+
       console.log("[AUTH] Has previous auth:", !!hasAuthenticated);
       console.log("[AUTH] Has existing token:", !!existingToken);
-      
+
       if (hasAuthenticated && existingToken && storedUser && storedUser.email.toLowerCase() === email.toLowerCase()) {
         console.log("[AUTH] Using cached authentication");
         setUser(storedUser);
@@ -97,11 +101,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       console.log("[AUTH] Calling /auth/login API...");
-      const response = await apiRequest<{ user: User; token: string }>("/auth/login", {
+      const response = await apiRequest("/auth/login", {
         method: "POST",
         body: { email, password },
         requiresAuth: false,
-      });
+      }) as { success: boolean; data?: { user: any; token: string }; error?: string };
 
       console.log("[AUTH] Login response:", response.success ? "Success" : `Failed: ${response.error}`);
       if (response.success && response.data) {
@@ -109,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("[AUTH] Received token and user:", { token: token.substring(0, 20) + "...", user: { id: apiUser.id, email: apiUser.email } });
         await setAuthToken(token);
         await AsyncStorage.setItem(HAS_AUTHENTICATED_KEY, "true");
-        
+
         const userData: User = {
           id: String(apiUser.id),
           email: apiUser.email,
@@ -120,6 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           assigned_lga: apiUser.assigned_lga || undefined,
           assigned_ward: apiUser.assigned_ward || undefined,
           created_date: new Date().toISOString(),
+          email_verified: apiUser.email_verified || false,
+          phone_verified: apiUser.phone_verified || false,
+          two_factor_enabled: apiUser.two_factor_enabled || false,
         };
 
         setUser(userData);
@@ -128,9 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!response.success) {
-        const isNetworkError = response.error?.includes("Network") || 
-                               response.error?.includes("fetch") ||
-                               response.error?.includes("Failed to fetch");
+        const isNetworkError = response.error?.includes("Network") ||
+          response.error?.includes("fetch") ||
+          response.error?.includes("Failed to fetch");
         if (isNetworkError && hasAuthenticated && existingToken && storedUser) {
           setUser(storedUser);
           return { success: true };
@@ -142,28 +149,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const hasAuthenticated = await AsyncStorage.getItem(HAS_AUTHENTICATED_KEY);
       const existingToken = await getAuthToken();
       const storedUser = await storage.getUser();
-      
+
       if (hasAuthenticated && existingToken && storedUser) {
         setUser(storedUser);
         return { success: true };
       }
-      
+
       return { success: false, error: "Cannot connect to server. First login requires internet connection." };
     }
   };
 
   const register = async (data: { email: string; password: string; full_name: string; phone_number?: string }): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await apiRequest<{ user: User; token: string }>("/auth/register", {
+      const response = await apiRequest("/auth/register", {
         method: "POST",
         body: data,
         requiresAuth: false,
-      });
+      }) as { success: boolean; data?: { user: any; token: string }; error?: string };
 
       if (response.success && response.data) {
         const { user: apiUser, token } = response.data;
         await setAuthToken(token);
-        
+
         const userData: User = {
           id: String(apiUser.id),
           email: apiUser.email,
@@ -172,6 +179,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user_role: apiUser.user_role as "admin" | "agent",
           status: apiUser.status as "active" | "inactive",
           created_date: new Date().toISOString(),
+          email_verified: apiUser.email_verified || false,
+          phone_verified: apiUser.phone_verified || false,
+          two_factor_enabled: apiUser.two_factor_enabled || false,
         };
 
         setUser(userData);
@@ -209,12 +219,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = async (updates: Partial<User>) => {
     if (!user) return;
-    
+
     try {
-      const response = await apiRequest<{ user: User }>("/auth/profile", {
+      const response = await apiRequest("/auth/profile", {
         method: "PUT",
         body: updates,
-      });
+      }) as { success: boolean; data?: { user: any }; error?: string };
 
       if (response.success && response.data?.user) {
         const updatedUser = { ...user, ...response.data.user };

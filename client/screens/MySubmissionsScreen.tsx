@@ -8,6 +8,8 @@ import {
   Modal,
   ScrollView,
   Image,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -18,7 +20,10 @@ import { SubmissionCard } from "@/components/SubmissionCard";
 import { EmptyState } from "@/components/EmptyState";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNetwork } from "@/contexts/NetworkContext";
 import { storage } from "@/lib/storage";
+import { syncService } from "@/lib/sync-service";
+import * as Haptics from "expo-haptics";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import type { LivestockSubmission } from "@/types";
 
@@ -30,16 +35,23 @@ export default function MySubmissionsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { isOnline } = useNetwork();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [submissions, setSubmissions] = useState<LivestockSubmission[]>([]);
   const [filter, setFilter] = useState<FilterType>("all");
   const [selectedFarmer, setSelectedFarmer] = useState<LivestockSubmission | null>(null);
 
   const loadData = useCallback(async () => {
-    const allSubmissions = await storage.getSubmissions();
+    const rawSubmissions = (await storage.getSubmissions()) as any;
+    const allSubmissions = rawSubmissions.map((sub: any) => ({
+      ...sub,
+      submission_status: sub.submission_status || 'synced'
+    }));
+
     const mySubmissions = allSubmissions.filter(
-      (s) => s.created_by === user?.email
+      (s: any) => s.created_by === user?.email
     );
     setSubmissions(mySubmissions);
   }, [user?.email]);
@@ -58,9 +70,42 @@ export default function MySubmissionsScreen() {
     setRefreshing(false);
   }, [loadData]);
 
+  const handleSync = useCallback(async () => {
+    const pendingCount = submissions.filter((s) => s.submission_status === "pending").length;
+
+    if (!isOnline) {
+      Alert.alert("Offline", "Please connect to the internet to sync your submissions.");
+      return;
+    }
+
+    if (pendingCount === 0) {
+      Alert.alert("Up to Date", "All your submissions are already synced to the server!", [{ text: "OK" }]);
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const result = await syncService.syncPendingSubmissions();
+
+      if (result.success) {
+        await loadData();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else if (result.synced > 0) {
+        await loadData();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isOnline, submissions, loadData]);
+
   const getImageUrl = (imagePath: string | null | undefined) => {
     if (!imagePath) return null;
-    
+
     if (imagePath.startsWith("blob:")) {
       const regId = selectedFarmer?.registration_id || selectedFarmer?.farmer_id;
       if (regId) {
@@ -76,9 +121,9 @@ export default function MySubmissionsScreen() {
     ) {
       return imagePath;
     }
-    
+
     if (imagePath.includes('/')) {
-        return `https://renthousehq.com/storage/${imagePath}`;
+      return `https://renthousehq.com/storage/${imagePath}`;
     }
     return `https://renthousehq.com/storage/farmers/${imagePath}`;
   };
@@ -158,9 +203,9 @@ export default function MySubmissionsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: LivestockSubmission }) => (
-      <SubmissionCard 
-        submission={item} 
-        showSyncStatus 
+      <SubmissionCard
+        submission={item}
+        showSyncStatus
         onPress={() => setSelectedFarmer(item)}
       />
     ),
@@ -244,9 +289,41 @@ export default function MySubmissionsScreen() {
             </ThemedText>
           </Pressable>
         </View>
+        <Pressable
+          onPress={handleSync}
+          disabled={isSyncing}
+          style={[
+            styles.syncBanner,
+            {
+              backgroundColor: pendingCount > 0 ? theme.warning : theme.success,
+              opacity: isSyncing ? 0.7 : 1
+            },
+          ]}
+        >
+          <View style={styles.syncContent}>
+            <Feather name={pendingCount > 0 ? "cloud-off" : "check-circle"} size={20} color="#fff" />
+            <View>
+              <ThemedText style={styles.syncTitle}>
+                {pendingCount > 0
+                  ? `${pendingCount} pending submission${pendingCount > 1 ? "s" : ""}`
+                  : "All data synced"}
+              </ThemedText>
+              <ThemedText style={styles.syncSubtitle}>
+                {pendingCount > 0
+                  ? "Tap to sync to server"
+                  : "Your submissions are up to date"}
+              </ThemedText>
+            </View>
+          </View>
+          {isSyncing ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Feather name="refresh-cw" size={20} color="#fff" />
+          )}
+        </Pressable>
       </View>
     ),
-    [theme, filter, submissions.length, syncedCount, pendingCount]
+    [theme, filter, submissions.length, syncedCount, pendingCount, isOnline, isSyncing, handleSync]
   );
 
   const ListEmptyComponent = useCallback(
@@ -298,6 +375,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.sm,
     flexWrap: "wrap",
+    marginBottom: Spacing.md,
+  },
+  syncBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.sm,
+  },
+  syncContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  syncTitle: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  syncSubtitle: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
   },
   filterChip: {
     flexDirection: "row",

@@ -65,7 +65,7 @@ export class SyncService {
     try {
       // Get all pending submissions
       const pendingSubmissions = await storage.getPendingSubmissions();
-      
+
       if (pendingSubmissions.length === 0) {
         result.success = true;
         this.isSyncing = false;
@@ -136,7 +136,7 @@ export class SyncService {
           }
         } catch (error: any) {
           console.error("Error syncing submission:", submission.registration_id, error);
-          
+
           const success = await storage.moveSubmissionToFailed(
             submission.id,
             error.message || "Network error",
@@ -164,7 +164,7 @@ export class SyncService {
       }
 
       result.success = result.synced > 0 || result.failed === 0;
-      
+
       // Cleanup old failed submissions
       await storage.cleanupOldSubmissions();
 
@@ -199,7 +199,7 @@ export class SyncService {
 
     try {
       const pendingSubmissions = await storage.getPendingSubmissions();
-      
+
       if (pendingSubmissions.length === 0) {
         result.success = true;
         return result;
@@ -223,13 +223,13 @@ export class SyncService {
         for (let i = 0; i < syncedData.length; i++) {
           const serverData = syncedData[i];
           const originalSubmission = pendingSubmissions[i];
-          
+
           if (originalSubmission) {
             const success = await storage.moveSubmissionToSynced(
               originalSubmission.id,
               serverData
             );
-            
+
             if (success) {
               result.synced++;
             } else {
@@ -252,7 +252,7 @@ export class SyncService {
               error.error || "Batch sync error",
               'pending'
             );
-            
+
             if (success) {
               result.failed++;
               result.errors.push({
@@ -274,7 +274,7 @@ export class SyncService {
               "Unknown batch sync error",
               'pending'
             );
-            
+
             if (success) {
               result.failed++;
               result.errors.push({
@@ -323,7 +323,7 @@ export class SyncService {
 
     try {
       const failedSubmissions = await storage.getFailedSubmissions();
-      
+
       if (failedSubmissions.length === 0) {
         result.success = true;
         return result;
@@ -344,9 +344,9 @@ export class SyncService {
             sync_error: undefined,
             updated_at: new Date().toISOString(),
           };
-          
+
           delete pendingSubmission.id; // Will get new ID
-          
+
           await storage.addPendingSubmission(pendingSubmission);
         } catch (error: any) {
           console.error("Error moving failed submission:", submission.registration_id, error);
@@ -360,7 +360,7 @@ export class SyncService {
 
       // Now sync the newly pending submissions
       const syncResult = await this.syncPendingSubmissions();
-      
+
       result.synced = syncResult.synced;
       result.failed = syncResult.failed;
       result.errors = [...result.errors, ...syncResult.errors];
@@ -388,7 +388,7 @@ export class SyncService {
   }> {
     const stats = await storage.getStats();
     const lastSync = await storage.getLastSync();
-    
+
     return {
       pending: stats.pending,
       synced: stats.synced,
@@ -406,7 +406,7 @@ export class SyncService {
 
     try {
       const stats = await storage.getStats();
-      
+
       // Only auto-sync if we have pending submissions
       if (stats.pending > 0) {
         console.log(`Auto-syncing ${stats.pending} pending submissions...`);
@@ -420,25 +420,40 @@ export class SyncService {
   // Prepare submission data for API
   private async prepareApiData(submission: any): Promise<any> {
     // Remove local-only fields
-    const { 
-      id, 
-      submission_status, 
-      sync_error, 
-      created_at, 
+    const {
+      id,
+      submission_status,
+      sync_error,
+      created_at,
       updated_at,
-      ...apiData 
+      ...apiData
     } = submission;
 
-    // No base64 conversion. Drop local-only paths during sync.
+    // Use FormData if there is an image
     if (apiData.farmer_image) {
       const imagePath = apiData.farmer_image as string;
+      const formData = new FormData();
 
-      if (
-        imagePath.startsWith("file:") ||
-        imagePath.startsWith("content://")
-      ) {
-        delete apiData.farmer_image;
-      }
+      // Append all regular fields
+      Object.keys(apiData).forEach(key => {
+        const value = apiData[key];
+        if (value !== null && value !== undefined && value !== '' && key !== 'farmer_image') {
+          formData.append(key, value.toString());
+        }
+      });
+
+      // Append image file
+      const filename = imagePath.split('/').pop() || 'image.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      formData.append('farmer_image', {
+        uri: imagePath,
+        name: filename,
+        type
+      } as any);
+
+      return formData;
     }
 
     return apiData;
