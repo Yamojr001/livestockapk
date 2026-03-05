@@ -9,10 +9,12 @@ import {
   Image,
   Platform,
   Dimensions,
+  Modal,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { storage } from "@/lib/storage";
@@ -33,9 +35,12 @@ export default function VerifyIDScreen() {
   const [verifiedFarmer, setVerifiedFarmer] = useState<LivestockSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+
   const searchFarmer = async (regId: string) => {
     if (!regId.trim()) return;
-    
+
     setIsLoading(true);
     setError(null);
     setVerifiedFarmer(null);
@@ -56,7 +61,8 @@ export default function VerifyIDScreen() {
         });
 
         if (response.success && response.data) {
-          setVerifiedFarmer(response.data);
+          // Type casting to appease strict TypeScript checking for agent_id string vs string|null
+          setVerifiedFarmer(response.data as LivestockSubmission);
         } else {
           setError("No farmer found with this ID. Please check and try again.");
         }
@@ -77,6 +83,25 @@ export default function VerifyIDScreen() {
     setSearchTerm("");
     setVerifiedFarmer(null);
     setError(null);
+  };
+
+  const openScanner = async () => {
+    if (!permission?.granted) {
+      const response = await requestPermission();
+      if (!response.granted) {
+        setError("Camera permission is required to scan QR codes.");
+        return;
+      }
+    }
+    setIsScannerOpen(true);
+  };
+
+  const handleBarcodeScanned = ({ type, data }: { type: string; data: string }) => {
+    setIsScannerOpen(false);
+    if (data) {
+      setSearchTerm(data);
+      searchFarmer(data);
+    }
   };
 
   return (
@@ -136,6 +161,18 @@ export default function VerifyIDScreen() {
               <ThemedText style={styles.verifyButtonText}>Verify ID</ThemedText>
             </>
           )}
+        </Pressable>
+
+        <Pressable
+          onPress={openScanner}
+          disabled={isLoading}
+          style={[
+            styles.scanButton,
+            { backgroundColor: theme.primaryLight, borderColor: theme.primary },
+          ]}
+        >
+          <Feather name="maximize-2" size={18} color={theme.primary} />
+          <ThemedText style={[styles.scanButtonText, { color: theme.primary }]}>Scan QR</ThemedText>
         </Pressable>
       </View>
 
@@ -245,10 +282,45 @@ export default function VerifyIDScreen() {
         <View style={[styles.emptyState, { borderColor: theme.border }]}>
           <Feather name="shield" size={48} color={theme.textSecondary} />
           <ThemedText style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-            Enter a registration ID to verify a farmer's identity
+            Enter a registration ID or scan a QR code to verify a farmer's identity
           </ThemedText>
         </View>
       ) : null}
+
+      <Modal visible={isScannerOpen} animationType="slide" presentationStyle="pageSheet">
+        <View style={styles.scannerModalBody}>
+          <View style={[styles.modalHeader, { backgroundColor: theme.backgroundDefault }]}>
+            <ThemedText style={styles.modalTitle}>Scan Farmer ID</ThemedText>
+            <Pressable onPress={() => setIsScannerOpen(false)} style={styles.closeModalButton}>
+              <Feather name="x" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+
+          <View style={styles.scannerWrapper}>
+            {isScannerOpen && permission?.granted ? (
+              <CameraView
+                style={StyleSheet.absoluteFillObject}
+                facing="back"
+                onBarcodeScanned={handleBarcodeScanned}
+                barcodeScannerSettings={{
+                  barcodeTypes: ["qr"],
+                }}
+              />
+            ) : (
+              <View style={styles.scannerFallback}>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <ThemedText style={[styles.scannerFallbackText, { color: theme.textSecondary }]}>
+                  Requesting camera permission...
+                </ThemedText>
+              </View>
+            )}
+
+            <View style={styles.scannerOverlay}>
+              <View style={styles.scannerTargetBox} />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -298,6 +370,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  scanButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  scanButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
   errorCard: {
     flexDirection: "row",
@@ -399,5 +485,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: Spacing.md,
+  },
+  scannerModalBody: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Platform.OS === "ios" ? 40 : 20,
+    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  closeModalButton: {
+    padding: Spacing.xs,
+  },
+  scannerWrapper: {
+    flex: 1,
+    position: "relative",
+  },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  scannerTargetBox: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: "#057856",
+    backgroundColor: "transparent",
+    borderRadius: BorderRadius.md,
+  },
+  scannerFallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  scannerFallbackText: {
+    marginTop: Spacing.md,
+    fontSize: 14,
   },
 });
