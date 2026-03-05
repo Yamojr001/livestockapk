@@ -126,18 +126,24 @@ class SubmissionController extends Controller
                 // Store path like: storage/farmers/filename.jpg
                 $validated['farmer_image'] = 'storage/' . $path;
             } else if ($request->filled('farmer_image')) {
+                $imageValue = $request->input('farmer_image');
+                
                 // Handle base64 images
-                if (str_starts_with($request->farmer_image, 'data:image')) {
-                    $imageData = explode(',', $request->farmer_image)[1];
+                if (is_string($imageValue) && str_starts_with($imageValue, 'data:image')) {
+                    $imageData = explode(',', $imageValue)[1];
                     $decoded = base64_decode($imageData);
                     $filename = uniqid() . '.jpg';
                     $path = 'farmers/' . $filename;
                     \Illuminate\Support\Facades\Storage::disk('public')->put($path, $decoded);
                     // Store path like: storage/farmers/filename.jpg
                     $validated['farmer_image'] = 'storage/' . $path;
-                } else if (!str_starts_with($request->farmer_image, '[object Object]')) {
-                    // Only store valid string values
-                    $validated['farmer_image'] = $request->farmer_image;
+                } else if (is_string($imageValue) && !str_contains($imageValue, '[object Object]') && !str_starts_with($imageValue, 'blob:')) {
+                    // If it's already a storage path or a valid URL, keep it
+                    if (str_contains($imageValue, 'storage/')) {
+                        $validated['farmer_image'] = substr($imageValue, strpos($imageValue, 'storage/'));
+                    } else {
+                        $validated['farmer_image'] = $imageValue;
+                    }
                 } else {
                     // Set to null for invalid values
                     $validated['farmer_image'] = null;
@@ -371,23 +377,25 @@ class SubmissionController extends Controller
                     // Store path like: storage/farmers/filename.jpg
                     $data['farmer_image'] = 'storage/' . $path;
                 } else if (isset($data['farmer_image']) && is_string($data['farmer_image'])) {
-                    if (str_starts_with($data['farmer_image'], 'data:image')) {
-                        $imageData = explode(',', $data['farmer_image'])[1];
+                    $imageValue = $data['farmer_image'];
+                    if (str_starts_with($imageValue, 'data:image')) {
+                        $imageData = explode(',', $imageValue)[1];
                         $decoded = base64_decode($imageData);
                         $filename = uniqid() . '.jpg';
                         $path = 'farmers/' . $filename;
                         \Illuminate\Support\Facades\Storage::disk('public')->put($path, $decoded);
                         // Store path like: storage/farmers/filename.jpg
                         $data['farmer_image'] = 'storage/' . $path;
-                    } else if (str_starts_with($data['farmer_image'], '[object Object]')) {
-                        // Prevent saving [object Object] to the database
+                    } else if (str_contains($imageValue, '[object Object]') || str_starts_with($imageValue, 'blob:')) {
+                        // Prevent saving [object Object] or blob URLs to the database
                         $data['farmer_image'] = null;
+                    } else if (str_contains($imageValue, 'storage/')) {
+                        // Normalize storage path
+                        $data['farmer_image'] = substr($imageValue, strpos($imageValue, 'storage/'));
                     }
                 } else {
                     // Make sure null is saved for invalid values
-                    if (isset($data['farmer_image']) && ($data['farmer_image'] === '[object Object]' || empty($data['farmer_image']))) {
-                         $data['farmer_image'] = null;
-                    }
+                    $data['farmer_image'] = null;
                 }
 
                 $data['registration_id'] = LivestockSubmission::generateRegistrationId();

@@ -1,6 +1,7 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { Alert } from "react-native";
+import { getApiBaseUrl } from "@/lib/api-config";
 
 export interface UserIDCardData {
   fullName: string;
@@ -178,12 +179,23 @@ const generateUserIDCardHTML = (data: UserIDCardData): string => {
   `;
 };
 
-const generateFarmerIDCardHTML = (data: FarmerIDCardData): string => {
+const generateFarmerIDCardHTML = (data: FarmerIDCardData, baseUrl: string = "http://127.0.0.1:8000"): string => {
+  const finalImageUrl = data.imageUrl && data.imageUrl.startsWith("storage/") 
+    ? `${baseUrl}/${data.imageUrl}` 
+    : data.imageUrl;
+
   const hasImage =
-    data.imageUrl && (data.imageUrl.startsWith("http") || data.imageUrl.startsWith("data:image"));
+    finalImageUrl && 
+    (finalImageUrl.startsWith("http") || 
+     finalImageUrl.startsWith("data:image") || 
+     finalImageUrl.startsWith("file://"));
 
   const imageHTML = hasImage
-    ? `<img src="${data.imageUrl}" class="farmer-image" alt="Farmer Photo" />`
+    ? `<img src="${finalImageUrl}" class="farmer-image" alt="Farmer Photo" onerror="this.style.display='none'; document.getElementById('placeholder-container').style.display='flex';" />
+       <div id="placeholder-container" class="image-placeholder" style="display:none;">
+         <div class="placeholder-icon">👨‍🌾</div>
+         <div class="placeholder-text">Farmer Photo</div>
+       </div>`
     : `<div class="image-placeholder">
          <div class="placeholder-icon">👨‍🌾</div>
          <div class="placeholder-text">Farmer Photo</div>
@@ -530,7 +542,11 @@ export const generateAndShareUserIDCard = async (data: UserIDCardData): Promise<
 
 export const generateAndShareFarmerIDCard = async (data: FarmerIDCardData): Promise<boolean> => {
   try {
-    const html = generateFarmerIDCardHTML(data);
+    const baseUrl = await getApiBaseUrl();
+    // Extract just the base URL without the /api/v1 part
+    const apiBaseUrl = baseUrl.replace(/\/api\/v1\/?$/, "");
+    
+    const html = generateFarmerIDCardHTML(data, apiBaseUrl);
 
     const file = await Print.printToFileAsync({ html, width: 400, height: 260, base64: false });
     const uri = (file && (file as any).uri) || null;
@@ -572,7 +588,11 @@ export const printUserIDCard = async (data: UserIDCardData): Promise<boolean> =>
 
 export const printFarmerIDCard = async (data: FarmerIDCardData): Promise<boolean> => {
   try {
-    const html = generateFarmerIDCardHTML(data);
+    const baseUrl = await getApiBaseUrl();
+    // Extract just the base URL without the /api/v1 part
+    const apiBaseUrl = baseUrl.replace(/\/api\/v1\/?$/, "");
+    
+    const html = generateFarmerIDCardHTML(data, apiBaseUrl);
     await Print.printAsync({ html });
     return true;
   } catch (error) {

@@ -23,6 +23,7 @@ import QRCode from "react-native-qrcode-svg";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { storage } from "@/lib/storage";
+import { getApiBaseUrl } from "@/lib/api-config";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import {
   formatPhoneNumber,
@@ -48,10 +49,25 @@ export default function IDCardScreen() {
     useState<LivestockSubmission | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [baseUrl, setBaseUrl] = useState<string>("http://127.0.0.1:8000");
 
   useEffect(() => {
     loadSubmissions();
+    initializeBaseUrl();
   }, []);
+
+  const initializeBaseUrl = async () => {
+    try {
+      const apiUrl = await getApiBaseUrl();
+      // Remove /api/v1 from the end to get just the base domain URL
+      const cleanUrl = apiUrl.replace(/\/api\/v1\/?$/, "");
+      setBaseUrl(cleanUrl);
+    } catch (error) {
+      console.error("Error getting base URL:", error);
+      // Use default if error
+      setBaseUrl("http://127.0.0.1:8000");
+    }
+  };
 
   const loadSubmissions = async () => {
     setIsLoading(true);
@@ -240,7 +256,7 @@ export default function IDCardScreen() {
         // Construct path based on whether it's a user or a farmer
         const sub = selectedSubmission as any;
         const folder = sub?._isUser ? 'users' : 'farmers';
-        return `https://renthousehq.com/storage/${folder}/${regId}.jpg`;
+        return `${baseUrl}/storage/${folder}/${regId}.jpg`;
       }
       return imagePath;
     }
@@ -255,12 +271,12 @@ export default function IDCardScreen() {
 
     // Laravel storage path handling
     if (imagePath.includes('/')) {
-        return `https://renthousehq.com/storage/${imagePath}`;
+        return `${baseUrl}/storage/${imagePath}`;
     }
     
     const sub = selectedSubmission as any;
     const folder = sub?._isUser ? 'users' : 'farmers';
-    return `https://renthousehq.com/storage/${folder}/${imagePath}`;
+    return `${baseUrl}/storage/${folder}/${imagePath}`;
   };
 
   const getQRValue = () => {
@@ -392,7 +408,7 @@ export default function IDCardScreen() {
                   />
                 ) : (
                   <View style={styles.photoPlaceholder}>
-                    <Feather name="user" size={36} color="#057856" />
+                    <Feather name="user" size={36} color="#FFFFFF" />
                   </View>
                 )}
               </View>
@@ -400,14 +416,14 @@ export default function IDCardScreen() {
               <View style={styles.infoSection}>
                 <View style={styles.infoRow}>
                   <ThemedText style={styles.infoLabel}>Name</ThemedText>
-                  <ThemedText style={styles.infoValue}>
+                  <ThemedText style={styles.infoValue} numberOfLines={1} adjustsFontSizeToFit>
                     {selectedSubmission.farmer_name || "N/A"}
                   </ThemedText>
                 </View>
 
                 <View style={styles.infoRow}>
                   <ThemedText style={styles.infoLabel}>Reg ID</ThemedText>
-                  <ThemedText style={[styles.infoValue, styles.regIdText]}>
+                  <ThemedText style={[styles.infoValue, styles.regIdText]} numberOfLines={1} adjustsFontSizeToFit>
                     {selectedSubmission.registration_id ||
                       selectedSubmission.farmer_id ||
                       "N/A"}
@@ -416,10 +432,10 @@ export default function IDCardScreen() {
 
                 <View style={styles.infoRow}>
                   <View style={styles.phoneRow}>
-                    <Feather name="phone" size={12} color="#057856" />
+                    <Feather name="phone" size={12} color="#FFFFFF" />
                     <ThemedText style={styles.phoneLabel}>Phone</ThemedText>
                   </View>
-                  <ThemedText style={styles.infoValue}>
+                  <ThemedText style={styles.infoValue} numberOfLines={1} adjustsFontSizeToFit>
                     {formatPhoneNumber(selectedSubmission.contact_number) || "N/A"}
                   </ThemedText>
                 </View>
@@ -427,8 +443,8 @@ export default function IDCardScreen() {
 
               <View style={styles.qrSection}>
                 <QRCode
-                  value={getQRValue()}
-                  size={80}
+                  value={getQRValue() || "N/A"}
+                  size={65}
                   backgroundColor="white"
                   color="#000"
                 />
@@ -438,7 +454,7 @@ export default function IDCardScreen() {
             <View style={styles.cardFooter}>
               <View style={styles.locationRow}>
                 <Feather name="map-pin" size={12} color="#FFFFFF" />
-                <ThemedText style={styles.locationText}>
+                <ThemedText style={styles.locationText} numberOfLines={1} adjustsFontSizeToFit>
                   {getLocation()}
                 </ThemedText>
               </View>
@@ -652,25 +668,25 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     backgroundColor: "transparent",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     alignItems: "center",
   },
   photoSection: {
-    width: 90,
-    height: 110,
-    marginRight: 16,
+    width: 75,
+    height: 95,
+    marginRight: 10,
   },
   farmerPhoto: {
-    width: 90,
-    height: 110,
-    borderRadius: 12,
+    width: 75,
+    height: 95,
+    borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
   photoPlaceholder: {
-    width: 90,
-    height: 110,
-    borderRadius: 12,
+    width: 75,
+    height: 95,
+    borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
@@ -715,21 +731,21 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   qrSection: {
-    width: 90,
+    width: 75,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "white",
-    borderRadius: 12,
-    padding: 6,
-    marginLeft: 10,
+    borderRadius: 8,
+    padding: 5,
+    marginLeft: 8,
   },
   cardFooter: {
     backgroundColor: "transparent",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.1)",
   },
@@ -737,6 +753,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flex: 1,
+    marginRight: 8,
   },
   locationText: {
     fontSize: 12,

@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { FormInput } from "@/components/FormInput";
@@ -327,45 +328,70 @@ export default function SubmissionFormScreen() {
       };
 
       if (isOnline) {
-        // Send image URI as a File in FormData if available
+        // Send to server
         let response;
         const cachedImagePath: string | null = null;
 
+        // Use JSON if we have an image to send as base64
+        // Otherwise use FormData for non-image submissions
         if (farmerImage) {
-          const formData = new FormData();
-
-          // Append all regular fields
-          Object.keys(submissionData).forEach(key => {
-            const value = submissionData[key as keyof typeof submissionData];
-            if (value !== null && value !== undefined && key !== 'farmer_image') {
-              formData.append(key, value.toString());
+          try {
+            console.log('Processing image for upload from:', farmerImage);
+            let imageUri = farmerImage;
+            
+            // Handle both file:// URIs and blob: URIs
+            let base64Data: string = '';
+            
+            if (imageUri.startsWith('blob:')) {
+              // For blob URLs (from web environment), use fetch
+              console.log('Image is blob URL, fetching as blob...');
+              const response_ = await fetch(imageUri);
+              const blob = await response_.blob();
+              base64Data = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const result = reader.result as string;
+                  // Extract base64 part from data URI
+                  const base64Part = result.split(',')[1];
+                  resolve(base64Part);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            } else {
+              // For file:// URIs, use expo-file-system
+              if (!imageUri.startsWith('file://')) {
+                imageUri = `file://${imageUri}`;
+              }
+              console.log('Image is file URI, reading with FileSystem...');
+              base64Data = await FileSystem.readAsStringAsync(imageUri, {
+                encoding: 'base64',
+              });
             }
-          });
-
-          // Append image file with proper URI handling
-          let imageUri = farmerImage;
-          
-          // Ensure proper file:// protocol for local files
-          if (!imageUri.startsWith('http') && !imageUri.startsWith('file://')) {
-            imageUri = `file://${imageUri}`;
+            
+            // Create data URI for base64 image
+            const base64Image = `data:image/jpeg;base64,${base64Data}`;
+            
+            console.log('Image read as base64, size:', base64Data.length);
+            
+            // Send as JSON with base64 image
+            const dataWithImage = {
+              ...submissionData,
+              farmer_image: base64Image,
+            };
+            
+            response = await apiRequest("/submissions", {
+              method: "POST",
+              body: dataWithImage,
+            });
+          } catch (error) {
+            console.error('Error processing image as base64:', error);
+            // Fallback: try without image
+            response = await apiRequest("/submissions", {
+              method: "POST",
+              body: submissionData,
+            });
           }
-          
-          const filename = `farmer_${Date.now()}.jpg`;
-          const match = /\.(\w+)$/.exec(farmerImage);
-          const type = match ? `image/${match[1]}` : `image/jpeg`;
-
-          console.log('Uploading image:', { uri: imageUri, name: filename, type });
-
-          formData.append('farmer_image', {
-            uri: imageUri,
-            name: filename,
-            type
-          } as any);
-
-          response = await apiRequest("/submissions", {
-            method: "POST",
-            body: formData,
-          });
         } else {
           // Send as JSON if no image
           response = await apiRequest("/submissions", {
