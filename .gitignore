@@ -90,3 +90,6 @@ livestock-api/
 .env.local
 .env.staging
 .env.production
+
+# Large local archives
+flutter_linux_3.24.3-stable.tar.xz
