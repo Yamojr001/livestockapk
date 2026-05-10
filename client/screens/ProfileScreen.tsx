@@ -199,19 +199,6 @@ export default function ProfileScreen() {
       {user?.user_role === "admin" || user?.user_role === "ministry" ? (
         <View style={styles.menuSection}>
           <ThemedText style={styles.menuTitle}>{user?.user_role === "admin" ? "Admin" : "System"} Settings</ThemedText>
-
-          {user?.user_role === "admin" && (
-            <Pressable
-              onPress={() => navigation.navigate("ApiSettings")}
-              style={[styles.menuItem, { backgroundColor: theme.backgroundDefault }]}
-            >
-              <View style={styles.menuItemLeft}>
-                <Feather name="server" size={20} color={theme.text} />
-                <ThemedText style={styles.menuItemText}>API Settings</ThemedText>
-              </View>
-              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-            </Pressable>
-          )}
         </View>
       ) : null}
 

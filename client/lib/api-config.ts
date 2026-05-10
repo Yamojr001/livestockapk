@@ -1,25 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_URL_KEY = "@livestock_api_url";
 const AUTH_TOKEN_KEY = "@livestock_auth_token";
 
 // Read from environment variable with fallback
 const DEFAULT_API_URL = 
   (typeof process !== "undefined" && 
    process.env?.EXPO_PUBLIC_API_URL) || 
-  "https://p.prepai.app/api/v1";
+  "https://northdemy.com/livestock/api/v1";
 
 export async function getApiBaseUrl() {
-  try {
-    const storedUrl = await AsyncStorage.getItem(API_URL_KEY);
-    return storedUrl || DEFAULT_API_URL;
-  } catch {
-    return DEFAULT_API_URL;
-  }
-}
-
-export async function setApiBaseUrl(url) {
-  await AsyncStorage.setItem(API_URL_KEY, url);
+  return DEFAULT_API_URL;
 }
 
 export async function getAuthToken() {
@@ -30,7 +20,7 @@ export async function getAuthToken() {
   }
 }
 
-export async function setAuthToken(token) {
+export async function setAuthToken(token: string) {
   if (token) {
     await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
   } else {
@@ -42,7 +32,10 @@ export async function clearAuthToken() {
   await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
-export async function apiRequest(endpoint, options = {}) {
+export async function apiRequest(
+  endpoint: string,
+  options: { method?: string; body?: any; requiresAuth?: boolean } = {},
+) {
   const { method = "GET", body, requiresAuth = true } = options;
 
   try {
@@ -92,7 +85,7 @@ export async function apiRequest(endpoint, options = {}) {
       }, 20000);
     });
 
-    const response = await Promise.race([requestPromise, timeoutPromise]);
+    const response = (await Promise.race([requestPromise, timeoutPromise])) as Response;
 
     // Parse response
     let responseData = null;
@@ -157,7 +150,7 @@ export async function apiRequest(endpoint, options = {}) {
       data: responseData,
       status: response.status,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("API Request Error:", error);
 
     let errorMessage = error.message || "Network error";
@@ -189,10 +182,7 @@ export async function apiRequest(endpoint, options = {}) {
 
 export async function testApiConnection() {
   try {
-    const baseUrl = await getApiBaseUrl();
-    const testUrl = baseUrl.endsWith("/api/v1")
-      ? baseUrl.replace("/api/v1", "/api")
-      : baseUrl;
+    const testUrl = (await getApiBaseUrl()).replace(/\/$/, "");
 
     console.log("Testing API connection to:", testUrl);
 
@@ -202,7 +192,6 @@ export async function testApiConnection() {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      timeout: 10000,
     });
 
     const isOk = response.ok;
@@ -217,14 +206,14 @@ export async function testApiConnection() {
 
 // Helper function for common API calls
 export const submissionApi = {
-  async create(data) {
+  async create(data: any) {
     return apiRequest("/submissions", {
       method: "POST",
       body: data,
     });
   },
 
-  async getAll(params = {}) {
+  async getAll(params: Record<string, string | number | boolean> = {}) {
     const queryString = new URLSearchParams(params).toString();
     const endpoint = queryString
       ? `/submissions?${queryString}`
@@ -285,7 +274,7 @@ export const submissionApi = {
 };
 
 export const authApi = {
-  async login(email, password) {
+  async login(email: string, password: string) {
     return apiRequest("/auth/login", {
       method: "POST",
       body: { email, password },
@@ -293,7 +282,7 @@ export const authApi = {
     });
   },
 
-  async register(data) {
+  async register(data: any) {
     return apiRequest("/auth/register", {
       method: "POST",
       body: data,
@@ -305,7 +294,7 @@ export const authApi = {
     return apiRequest("/auth/me");
   },
 
-  async updateProfile(data) {
+  async updateProfile(data: any) {
     return apiRequest("/auth/profile", {
       method: "PUT",
       body: data,
