@@ -7,7 +7,7 @@ const AUTH_TOKEN_KEY = "@livestock_auth_token";
 const DEFAULT_API_URL = 
   (typeof process !== "undefined" && 
    process.env?.EXPO_PUBLIC_API_URL) || 
-  "https://northdemy.com/livestock/api/v1";
+  "https://p.prepai.app/api/v1";
 
 export async function getApiBaseUrl() {
   try {
